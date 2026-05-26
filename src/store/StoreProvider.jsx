@@ -6,51 +6,57 @@ import {
   loadUserData, uploadLocalData,
   saveProfile, saveSession, removeSession,
   saveCheckin, saveGoals, saveNutritionLog,
+  saveMeasurementEntries, upsertLeaderboardStats,
 } from '../lib/db.js'
+import { computeLeaderboardStats } from '../utils/leaderboard.js'
 
 export function StoreProvider({ children }) {
-  const [profile,       setProfileState]    = useState(null)
-  const [sessions,      setSessionsState]   = useState([])
-  const [checkins,      setCheckinsState]   = useState([])
-  const [goals,         setGoalsState]      = useState({})
-  const [nutritionLogs, setNutritionLogsState] = useState({})
-  const [loaded,        setLoaded]          = useState(false)
-  const [user,          setUser]            = useState(null)
-  const [syncStatus,    setSyncStatus]      = useState('idle') // 'idle'|'syncing'|'synced'|'error'
+  const [profile,            setProfileState]         = useState(null)
+  const [sessions,           setSessionsState]        = useState([])
+  const [checkins,           setCheckinsState]        = useState([])
+  const [goals,              setGoalsState]           = useState({})
+  const [nutritionLogs,      setNutritionLogsState]   = useState({})
+  const [measurementHistory, setMeasurementHistoryState] = useState([])
+  const [loaded,             setLoaded]               = useState(false)
+  const [user,               setUser]                 = useState(null)
+  const [syncStatus,         setSyncStatus]           = useState('idle')
 
-  const userRef = useRef(null)
+  const userRef    = useRef(null)
+  const stateRef   = useRef({}) // live snapshot for leaderboard pushes
 
-  // ── 1. Load localStorage immediately (instant) ──────────────────────────────
+  // Keep stateRef current
+  useEffect(() => {
+    stateRef.current = { profile, sessions, checkins, measurementHistory }
+  }, [profile, sessions, checkins, measurementHistory])
+
+  // ── 1. Load localStorage immediately ──────────────────────────────────────
   useEffect(() => {
     setProfileState(storage.getProfile())
     setSessionsState(storage.getSessions())
     setCheckinsState(storage.getCheckins())
     setGoalsState(storage.getGoals())
     setNutritionLogsState(storage.getNutritionLogs())
+    setMeasurementHistoryState(storage.getMeasurementHistory())
     setLoaded(true)
   }, [])
 
-  // ── 2. Supabase auth listener ────────────────────────────────────────────────
+  // ── 2. Auth listener ───────────────────────────────────────────────────────
   useEffect(() => {
-    // Check existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       const u = session?.user ?? null
-      setUser(u)
-      userRef.current = u
+      setUser(u); userRef.current = u
       if (u) handleSignIn(u.id)
     })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null
-      setUser(u)
-      userRef.current = u
+      setUser(u); userRef.current = u
       if (event === 'SIGNED_IN')  handleSignIn(u.id)
       if (event === 'SIGNED_OUT') setSyncStatus('idle')
     })
     return () => subscription.unsubscribe()
   }, []) // eslint-disable-line
 
-  // ── 3. On sign-in: pull from Supabase; on first login upload local data ─────
+  // ── 3. On sign-in: sync down (or upload local if first time) ──────────────
   async function handleSignIn(userId) {
     setSyncStatus('syncing')
     try {
@@ -58,136 +64,140 @@ export function StoreProvider({ children }) {
       const hasRemote = remote.profile || remote.sessions.length > 0
 
       if (hasRemote) {
-        // Remote wins — overwrite local state & storage
-        if (remote.profile) {
-          storage.setProfile(remote.profile)
-          setProfileState(remote.profile)
-        }
-        if (remote.sessions.length > 0) {
-          storage.setSessions(remote.sessions)
-          setSessionsState(remote.sessions)
-        }
-        if (remote.checkins.length > 0) {
-          storage.setCheckins(remote.checkins)
-          setCheckinsState(remote.checkins)
-        }
-        if (Object.keys(remote.goals).length > 0) {
-          storage.setGoals(remote.goals)
-          setGoalsState(remote.goals)
-        }
-        if (Object.keys(remote.nutritionLogs).length > 0) {
-          Object.entries(remote.nutritionLogs).forEach(([date, log]) => storage.setNutritionLog(date, log))
+        if (remote.profile)  { storage.setProfile(remote.profile);   setProfileState(remote.profile) }
+        if (remote.sessions.length)  { storage.setSessions(remote.sessions); setSessionsState(remote.sessions) }
+        if (remote.checkins.length)  { storage.setCheckins(remote.checkins); setCheckinsState(remote.checkins) }
+        if (Object.keys(remote.goals).length) { storage.setGoals(remote.goals); setGoalsState(remote.goals) }
+        if (Object.keys(remote.nutritionLogs).length) {
+          Object.entries(remote.nutritionLogs).forEach(([d,l]) => storage.setNutritionLog(d,l))
           setNutritionLogsState(storage.getNutritionLogs())
         }
+        if (remote.measurementHistory.length) {
+          storage.setMeasurementHistory(remote.measurementHistory)
+          setMeasurementHistoryState(remote.measurementHistory)
+        }
       } else {
-        // First sign-in — migrate local data up to Supabase
         await uploadLocalData(userId, {
-          profile:       storage.getProfile()       || {},
-          sessions:      storage.getSessions()      || [],
-          checkins:      storage.getCheckins()      || [],
-          goals:         storage.getGoals()         || {},
-          nutritionLogs: storage.getNutritionLogs() || {},
+          profile:            storage.getProfile()            || {},
+          sessions:           storage.getSessions()           || [],
+          checkins:           storage.getCheckins()           || [],
+          goals:              storage.getGoals()              || {},
+          nutritionLogs:      storage.getNutritionLogs()      || {},
+          measurementHistory: storage.getMeasurementHistory() || [],
         })
       }
       setSyncStatus('synced')
+      // Push leaderboard stats on every sign-in
+      pushLeaderboard(userId)
     } catch (err) {
-      console.error('[Supabase sync]', err)
+      console.error('[sync]', err)
       setSyncStatus('error')
     }
   }
 
-  // ── 4. Fire-and-forget helper ────────────────────────────────────────────────
+  // ── 4. Leaderboard push (debounced) ───────────────────────────────────────
+  const lbTimerRef = useRef(null)
+  function scheduleLeaderboardPush() {
+    if (!userRef.current) return
+    clearTimeout(lbTimerRef.current)
+    lbTimerRef.current = setTimeout(() => pushLeaderboard(userRef.current.id), 3000)
+  }
+  function pushLeaderboard(userId) {
+    const { profile: p, sessions: s, checkins: c, measurementHistory: mh } = stateRef.current
+    if (!p) return
+    const stats = computeLeaderboardStats(p, s || [], c || [], mh || [])
+    const name  = p.name || `Athlete`
+    upsertLeaderboardStats(userId, name, stats).catch(e => console.warn('[lb]', e))
+  }
+
+  // ── 5. Fire-and-forget helper ──────────────────────────────────────────────
   function push(fn) {
     if (userRef.current) fn(userRef.current.id).catch(e => console.warn('[push]', e))
   }
 
-  // ── 5. Store actions ─────────────────────────────────────────────────────────
+  // ── 6. Store actions ───────────────────────────────────────────────────────
   const setProfile = useCallback((p) => {
-    storage.setProfile(p)
-    setProfileState(p)
+    storage.setProfile(p); setProfileState(p)
     push(uid => saveProfile(uid, p))
+    scheduleLeaderboardPush()
   }, [])
 
   const addSession = useCallback((session) => {
     storage.addSession(session)
     setSessionsState(storage.getSessions())
     push(uid => saveSession(uid, session))
+    scheduleLeaderboardPush()
   }, [])
 
   const updateSession = useCallback((id, updates) => {
     storage.updateSession(id, updates)
-    const all = storage.getSessions()
-    setSessionsState(all)
+    const all = storage.getSessions(); setSessionsState(all)
     const updated = all.find(s => s.id === id)
     if (updated) push(uid => saveSession(uid, updated))
+    scheduleLeaderboardPush()
   }, [])
 
   const deleteSession = useCallback((id) => {
-    storage.deleteSession(id)
-    setSessionsState(storage.getSessions())
+    storage.deleteSession(id); setSessionsState(storage.getSessions())
     push(uid => removeSession(uid, id))
+    scheduleLeaderboardPush()
   }, [])
 
   const addCheckin = useCallback((checkin) => {
-    storage.addCheckin(checkin)
-    setCheckinsState(storage.getCheckins())
+    storage.addCheckin(checkin); setCheckinsState(storage.getCheckins())
     push(uid => saveCheckin(uid, checkin))
+    scheduleLeaderboardPush()
   }, [])
 
   const setGoals = useCallback((g) => {
-    storage.setGoals(g)
-    setGoalsState(g)
+    storage.setGoals(g); setGoalsState(g)
     push(uid => saveGoals(uid, g))
   }, [])
 
   const addFoodEntry = useCallback((dateStr, meal, entry) => {
     storage.addFoodEntry(dateStr, meal, entry)
-    const logs = storage.getNutritionLogs()
-    setNutritionLogsState(logs)
+    const logs = storage.getNutritionLogs(); setNutritionLogsState(logs)
     push(uid => saveNutritionLog(uid, dateStr, logs[dateStr]))
   }, [])
 
   const removeFoodEntry = useCallback((dateStr, meal, entryId) => {
     storage.removeFoodEntry(dateStr, meal, entryId)
-    const logs = storage.getNutritionLogs()
-    setNutritionLogsState(logs)
-    push(uid => saveNutritionLog(uid, dateStr, logs[dateStr] ?? { meals: { breakfast: [], lunch: [], dinner: [], snacks: [] }, extraActivities: [] }))
+    const logs = storage.getNutritionLogs(); setNutritionLogsState(logs)
+    push(uid => saveNutritionLog(uid, dateStr, logs[dateStr] ?? { meals: { breakfast:[], lunch:[], dinner:[], snacks:[] }, extraActivities:[] }))
   }, [])
 
   const addExtraActivity = useCallback((dateStr, activity) => {
     storage.addExtraActivity(dateStr, activity)
-    const logs = storage.getNutritionLogs()
-    setNutritionLogsState(logs)
+    const logs = storage.getNutritionLogs(); setNutritionLogsState(logs)
     push(uid => saveNutritionLog(uid, dateStr, logs[dateStr]))
   }, [])
 
   const removeExtraActivity = useCallback((dateStr, actId) => {
     storage.removeExtraActivity(dateStr, actId)
-    const logs = storage.getNutritionLogs()
-    setNutritionLogsState(logs)
-    push(uid => saveNutritionLog(uid, dateStr, logs[dateStr] ?? { meals: { breakfast: [], lunch: [], dinner: [], snacks: [] }, extraActivities: [] }))
+    const logs = storage.getNutritionLogs(); setNutritionLogsState(logs)
+    push(uid => saveNutritionLog(uid, dateStr, logs[dateStr] ?? { meals: { breakfast:[], lunch:[], dinner:[], snacks:[] }, extraActivities:[] }))
+  }, [])
+
+  // Measurement history
+  const addMeasurementEntry = useCallback((entry) => {
+    storage.addMeasurementEntry(entry)
+    const history = storage.getMeasurementHistory()
+    setMeasurementHistoryState(history)
+    push(uid => saveMeasurementEntries(uid, [entry]))
+    scheduleLeaderboardPush()
   }, [])
 
   const resetApp = useCallback(async () => {
     storage.clearAll()
-    setProfileState(null)
-    setSessionsState([])
-    setCheckinsState([])
-    setGoalsState({})
-    setNutritionLogsState({})
-    if (userRef.current) {
-      await supabase.auth.signOut()
-      setUser(null)
-      userRef.current = null
-    }
+    setProfileState(null); setSessionsState([]); setCheckinsState([])
+    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([])
+    if (userRef.current) { await supabase.auth.signOut(); setUser(null); userRef.current = null }
     localStorage.removeItem('ft_auth_skipped')
   }, [])
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
-    setUser(null)
-    userRef.current = null
-    setSyncStatus('idle')
+    setUser(null); userRef.current = null; setSyncStatus('idle')
     localStorage.removeItem('ft_auth_skipped')
   }, [])
 
@@ -198,6 +208,7 @@ export function StoreProvider({ children }) {
       checkins, addCheckin,
       goals, setGoals,
       nutritionLogs, addFoodEntry, removeFoodEntry, addExtraActivity, removeExtraActivity,
+      measurementHistory, addMeasurementEntry,
       loaded, resetApp,
       user, syncStatus, signOut,
     }}>

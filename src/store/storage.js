@@ -1,9 +1,10 @@
 const KEYS = {
-  PROFILE:   'ft_profile',
-  SESSIONS:  'ft_sessions',
-  CHECKINS:  'ft_checkins',
-  GOALS:     'ft_goals',
-  NUTRITION: 'ft_nutrition',
+  PROFILE:     'ft_profile',
+  SESSIONS:    'ft_sessions',
+  CHECKINS:    'ft_checkins',
+  GOALS:       'ft_goals',
+  NUTRITION:   'ft_nutrition',
+  MHISTORY:    'ft_mhistory',
 }
 
 function get(key) {
@@ -83,6 +84,18 @@ export const storage = {
       all[dateStr].extraActivities = all[dateStr].extraActivities.filter(a => a.id !== actId)
       set(KEYS.NUTRITION, all)
     }
+  },
+
+  // Measurement history: [{ id, date, metric, value, unit }]
+  getMeasurementHistory: () => get(KEYS.MHISTORY) || [],
+  setMeasurementHistory: (h) => set(KEYS.MHISTORY, h),
+  addMeasurementEntry: (entry) => {
+    const history = storage.getMeasurementHistory()
+    history.push(entry)
+    storage.setMeasurementHistory(history)
+  },
+  removeMeasurementEntry: (id) => {
+    storage.setMeasurementHistory(storage.getMeasurementHistory().filter(e => e.id !== id))
   },
 
   clearAll: () => Object.values(KEYS).forEach(k => localStorage.removeItem(k)),

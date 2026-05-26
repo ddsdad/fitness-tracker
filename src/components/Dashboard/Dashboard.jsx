@@ -7,6 +7,7 @@ import { MUSCLE_GROUPS, RP_VOLUME } from '../../data/muscles.js'
 import { getCurrentWeek } from '../../utils/milestones.js'
 import { structuralRiskScore } from '../../utils/balance.js'
 import { getWeekScheduleData } from '../../utils/recommendations.js'
+import Compete from '../Compete/Compete.jsx'
 
 const TIME_WINDOWS = [{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: 'All', days: 365 }]
 
@@ -168,7 +169,7 @@ export default function Dashboard() {
   const { profile, sessions, goals } = useStore()
   const [window_, setWindow_] = useState(7)
   const [activeMuscle, setActiveMuscle] = useState(null)
-  const [tab, setTab] = useState('heatmap') // heatmap | schedule | stats
+  const [tab, setTab] = useState('heatmap') // heatmap | schedule | compete | stats
 
   const muscleVolume = getMuscleVolume(sessions, window_)
   const goalId = profile?.physiqueGoal || 'overall_size'
@@ -224,15 +225,16 @@ export default function Dashboard() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 20, gap: 2 }}>
-        {[['heatmap', 'Heatmap'], ['schedule', 'Schedule'], ['stats', 'Stats']].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '8px', borderRadius: 999, border: 'none', cursor: 'pointer', background: tab === id ? 'var(--bg2)' : 'transparent', color: tab === id ? 'var(--text)' : 'var(--text3)', fontWeight: tab === id ? 600 : 400, fontSize: '0.875rem', transition: 'all 0.15s' }}>
+        {[['heatmap','Heatmap'],['schedule','Schedule'],['compete','🏆 Compete'],['stats','Stats']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '7px 4px', borderRadius: 999, border: 'none', cursor: 'pointer', background: tab === id ? 'var(--bg2)' : 'transparent', color: tab === id ? (id === 'compete' ? 'var(--green)' : 'var(--text)') : 'var(--text3)', fontWeight: tab === id ? 600 : 400, fontSize: '0.75rem', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
             {label}
           </button>
         ))}
       </div>
 
-      {tab === 'stats' && <BodyStatsPanel profile={profile} />}
+      {tab === 'stats'    && <BodyStatsPanel profile={profile} />}
       {tab === 'schedule' && <WeekSchedule sessions={sessions} goals={goals} profile={profile} />}
+      {tab === 'compete'  && <Compete />}
 
       {tab === 'heatmap' && (
         <>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { v4 as uuidv4 } from 'uuid'
 import { useStore } from '../../store/useStore.js'
 import { getCurrentWeek, getProgressStatus, getStatusLabel, detectTrainingLevel, TRAINING_LEVEL_META } from '../../utils/milestones.js'
 import { caseyButtCeiling, lbmAndFat, navyBF } from '../../utils/calculations.js'
@@ -122,6 +123,81 @@ function CheckInModal({ profile, currentWeek, onSave, onClose }) {
   )
 }
 
+// ── Edit a single measurement or lift ─────────────────────────────────────────
+function EditMeasurementModal({ metric, label, currentValue, unit, onSave, onClose }) {
+  const [value, setValue] = useState('')
+  const save = () => {
+    const v = parseFloat(value)
+    if (isNaN(v) || v <= 0) return
+    onSave(metric, v)
+    onClose()
+  }
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:300, display:'flex', alignItems:'flex-end' }}>
+      <div style={{ width:'100%', maxWidth:480, margin:'0 auto', background:'var(--bg2)', borderRadius:'16px 16px 0 0', padding:'24px 20px 36px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+          <h3>Update {label}</h3>
+          <button className="btn btn-ghost" onClick={onClose} style={{ padding:'4px 12px' }}>✕</button>
+        </div>
+        <div style={{ fontSize:'0.875rem', color:'var(--text2)', marginBottom:12 }}>
+          Current: <strong>{currentValue} {unit}</strong>
+        </div>
+        <div className="input-unit" style={{ marginBottom:16 }}>
+          <input
+            className="input"
+            type="number"
+            inputMode="decimal"
+            placeholder={String(currentValue)}
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            autoFocus
+          />
+          <span>{unit}</span>
+        </div>
+        {value && parseFloat(value) > 0 && (
+          <div style={{ fontSize:'0.8rem', color: parseFloat(value) > currentValue ? 'var(--green)' : 'var(--red)', marginBottom:14 }}>
+            {parseFloat(value) > currentValue ? '▲' : '▼'} {Math.abs(parseFloat(value) - currentValue).toFixed(1)} {unit} from current
+          </div>
+        )}
+        <button className="btn btn-primary btn-full" onClick={save} disabled={!value || parseFloat(value) <= 0}>
+          <IconCheck /> Save Update
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Measurement history mini-chart ────────────────────────────────────────────
+function HistorySparkline({ history, metric, color = 'var(--green)' }) {
+  const recs = history.filter(r => r.metric === metric).sort((a,b) => a.date.localeCompare(b.date))
+  if (recs.length < 2) return null
+  const data = recs.map(r => ({ date: r.date.slice(5), v: r.value }))
+  const min = Math.min(...data.map(d => d.v)) * 0.98
+  const max = Math.max(...data.map(d => d.v)) * 1.02
+  const first = recs[0].value, last = recs[recs.length-1].value
+  const diff = +(last - first).toFixed(1)
+  return (
+    <div style={{ marginTop:6 }}>
+      <ResponsiveContainer width="100%" height={60}>
+        <LineChart data={data} margin={{ top:4, right:4, bottom:0, left:0 }}>
+          <YAxis domain={[min,max]} hide />
+          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} />
+          <Tooltip
+            content={({ active, payload }) =>
+              active && payload?.length
+                ? <div style={{ background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:6, padding:'4px 8px', fontSize:'0.75rem' }}>{payload[0].payload.date}: {payload[0].value}</div>
+                : null
+            }
+          />
+        </LineChart>
+      </ResponsiveContainer>
+      <div style={{ fontSize:'0.7rem', color: diff >= 0 ? 'var(--green)' : 'var(--red)', marginTop:2 }}>
+        {diff >= 0 ? '▲' : '▼'} {Math.abs(diff)} since start · {recs.length} entries
+      </div>
+    </div>
+  )
+}
+
 const CALORIC_MODES = [
   { id: 'aggressive_bulk', label: 'Aggressive Bulk', emoji: '🔥', desc: '+500 kcal surplus', mult: 1.4 },
   { id: 'lean_bulk',       label: 'Lean Bulk',       emoji: '💪', desc: '+200 kcal surplus', mult: 1.0 },
@@ -130,9 +206,25 @@ const CALORIC_MODES = [
 ]
 
 export default function Progress() {
-  const { profile, setProfile, checkins, addCheckin, sessions } = useStore()
+  const { profile, setProfile, checkins, addCheckin, sessions, measurementHistory, addMeasurementEntry } = useStore()
   const [tab, setTab] = useState('body') // body | lifts | composition
   const [showCheckin, setShowCheckin] = useState(false)
+  const [editing, setEditing] = useState(null) // { metric, label, currentValue, unit, type }
+
+  const handleSaveEdit = (metric, newValue) => {
+    const today = new Date().toISOString().slice(0,10)
+    const unit  = profile.unit === 'kg' ? (editing.type === 'body' ? 'cm' : 'kg') : (editing.type === 'body' ? 'in' : 'lbs')
+    // Log to history
+    addMeasurementEntry({ id: uuidv4(), date: today, metric, value: newValue, unit })
+    // Update profile
+    if (metric === 'bodyweight') {
+      setProfile({ ...profile, bodyweight: newValue })
+    } else if (editing.type === 'body') {
+      setProfile({ ...profile, measurements: { ...(profile.measurements || {}), [metric]: newValue } })
+    } else if (editing.type === 'lift') {
+      setProfile({ ...profile, liftMaxes: { ...(profile.liftMaxes || {}), [metric]: newValue } })
+    }
+  }
 
   if (!profile) return <EmptyState />
   const currentWeek = getCurrentWeek(profile.startDate)
@@ -259,6 +351,16 @@ export default function Progress() {
       {showCheckin && (
         <CheckInModal profile={profile} currentWeek={currentWeek} onSave={addCheckin} onClose={() => setShowCheckin(false)} />
       )}
+      {editing && (
+        <EditMeasurementModal
+          metric={editing.metric}
+          label={editing.label}
+          currentValue={editing.currentValue}
+          unit={editing.unit}
+          onSave={handleSaveEdit}
+          onClose={() => setEditing(null)}
+        />
+      )}
 
       {/* Timeline progress bar */}
       <div className="card" style={{ marginBottom: 20 }}>
@@ -346,14 +448,30 @@ export default function Progress() {
 
       {tab === 'body' && (
         <>
+          {/* Bodyweight */}
           <div className="card" style={{ marginBottom: 16 }}>
-            <h3 style={{ marginBottom: 16 }}>Bodyweight</h3>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <h3>Bodyweight</h3>
+              <button
+                onClick={() => setEditing({ metric:'bodyweight', label:'Bodyweight', currentValue: profile.bodyweight, unit: profile.unit, type:'bw' })}
+                style={{ background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:8, padding:'4px 10px', fontSize:'0.75rem', color:'var(--text2)', cursor:'pointer' }}
+              >✏️ Edit</button>
+            </div>
             <MetricChart data={chartData} dataKey="actualBW" targetKey="targetBW" label="Bodyweight" unit={profile.unit} />
+            <HistorySparkline history={measurementHistory} metric="bodyweight" />
           </div>
+
           {Object.entries(MEASURE_LABELS).map(([k, label]) => (
             <div key={k} className="card" style={{ marginBottom: 12 }}>
-              <h3 style={{ marginBottom: 12 }}>{label}</h3>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                <h3>{label}</h3>
+                <button
+                  onClick={() => setEditing({ metric:k, label, currentValue: profile.measurements?.[k] || 0, unit: profile.unit === 'kg' ? 'cm' : 'in', type:'body' })}
+                  style={{ background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:8, padding:'4px 10px', fontSize:'0.75rem', color:'var(--text2)', cursor:'pointer' }}
+                >✏️ Edit</button>
+              </div>
               <MetricChart data={chartData} dataKey={`actual_${k}`} targetKey={`target_${k}`} label={label} color="#3b82f6" />
+              <HistorySparkline history={measurementHistory} metric={k} color="#3b82f6" />
             </div>
           ))}
         </>
@@ -370,9 +488,16 @@ export default function Progress() {
               <div key={k} className="card" style={{ marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <h3>{label}</h3>
-                  {badge && <span className={`badge ${badge.cls}`}>{badge.label}</span>}
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    {badge && <span className={`badge ${badge.cls}`}>{badge.label}</span>}
+                    <button
+                      onClick={() => setEditing({ metric:k, label, currentValue: profile.liftMaxes?.[k] || 0, unit: profile.unit, type:'lift' })}
+                      style={{ background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:8, padding:'4px 10px', fontSize:'0.75rem', color:'var(--text2)', cursor:'pointer' }}
+                    >✏️ Edit</button>
+                  </div>
                 </div>
                 <MetricChart data={chartData} dataKey={`actual_${k}`} targetKey={`target_${k}`} label={label} color="#a78bfa" unit={profile.unit} />
+                <HistorySparkline history={measurementHistory} metric={k} color="#a78bfa" />
               </div>
             )
           })}
