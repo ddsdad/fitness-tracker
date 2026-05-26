@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq \"\" } | Stop-Process -Force -ErrorAction SilentlyContinue; Write-Output \"Stopped node processes\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npm install *)",
+      "Bash(Get-Process -Name node -ErrorAction SilentlyContinue)",
+      "Bash(Stop-Process -Force)",
+      "Bash(Start-Sleep -Seconds 1)",
+      "Bash(Start-Process -NoNewWindow -FilePath \"npm\" -ArgumentList \"run\",\"dev\" -RedirectStandardOutput \".\\\\vite.log\" -RedirectStandardError \".\\\\vite.err\")",
+      "Bash(Start-Sleep -Seconds 5)",
+      "Bash(Get-Content \".\\\\vite.log\" -ErrorAction SilentlyContinue)",
+      "Bash(npx vite *)"
+    ]
+  }
+}
