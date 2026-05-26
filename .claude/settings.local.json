@@ -12,7 +12,8 @@
       "Bash(Start-Process -NoNewWindow -FilePath \"npm\" -ArgumentList \"run\",\"dev\" -RedirectStandardOutput \".\\\\vite.log\" -RedirectStandardError \".\\\\vite.err\")",
       "Bash(Start-Sleep -Seconds 5)",
       "Bash(Get-Content \".\\\\vite.log\" -ErrorAction SilentlyContinue)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(npm list *)"
     ]
   }
 }

@@ -9,25 +9,40 @@ import Goals from './components/Goals/Goals.jsx'
 import Recommendations from './components/Recommendations/Recommendations.jsx'
 import Nutrition from './components/Nutrition/Nutrition.jsx'
 import Nav from './components/shared/Nav.jsx'
+import AuthGate from './components/Auth/AuthGate.jsx'
 
 function AppInner() {
-  const { profile, setProfile, loaded } = useStore()
-  const [tab, setTab] = useState('dashboard')
+  const { profile, setProfile, loaded, user, syncStatus, signOut } = useStore()
+  const [tab, setTab]                   = useState('dashboard')
   const [preloadedPlan, setPreloadedPlan] = useState(null)
+  const [skippedAuth, setSkippedAuth]   = useState(() => !!localStorage.getItem('ft_auth_skipped'))
 
   const handleStartSession = (planExercises) => {
     setPreloadedPlan(planExercises)
     setTab('workout')
   }
 
+  const handleSkipAuth = () => {
+    localStorage.setItem('ft_auth_skipped', '1')
+    setSkippedAuth(true)
+  }
+
+  // Loading spinner
   if (!loaded) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16 }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid var(--bg3)', borderTop: '3px solid var(--green)', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', flexDirection:'column', gap:16 }}>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ width:40, height:40, borderRadius:'50%', border:'3px solid var(--bg3)', borderTop:'3px solid var(--green)', animation:'spin 0.8s linear infinite' }} />
       </div>
     )
   }
 
+  // Auth gate — shown if not signed in and hasn't skipped
+  if (!user && !skippedAuth) {
+    return <AuthGate onSkip={handleSkipAuth} />
+  }
+
+  // Onboarding — shown if profile not set up yet
   if (!profile) {
     return <Onboarding onComplete={setProfile} />
   }
@@ -35,18 +50,34 @@ function AppInner() {
   return (
     <>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      {tab === 'dashboard' && <Dashboard />}
-      {tab === 'workout' && (
+
+      {/* Sync indicator strip */}
+      {user && syncStatus === 'syncing' && (
+        <div style={{
+          position:'fixed', top:0, left:'50%', transform:'translateX(-50%)',
+          width:'100%', maxWidth:480, zIndex:200,
+          background:'rgba(59,130,246,0.15)', borderBottom:'1px solid rgba(59,130,246,0.3)',
+          padding:'4px 16px', fontSize:'0.7rem', color:'var(--blue)',
+          display:'flex', alignItems:'center', gap:6,
+        }}>
+          <div style={{ width:8, height:8, borderRadius:'50%', border:'1.5px solid var(--blue)', borderTopColor:'transparent', animation:'spin 0.6s linear infinite' }} />
+          Syncing…
+        </div>
+      )}
+
+      {tab === 'dashboard'  && <Dashboard onSignOut={signOut} />}
+      {tab === 'workout'    && (
         <WorkoutLog
           onNavigate={setTab}
           preloadedPlan={preloadedPlan}
           onPreloadConsumed={() => setPreloadedPlan(null)}
         />
       )}
-      {tab === 'progress' && <Progress />}
-      {tab === 'goals' && <Goals />}
+      {tab === 'progress'   && <Progress />}
+      {tab === 'goals'      && <Goals />}
       {tab === 'recommend'  && <Recommendations onStartSession={handleStartSession} />}
       {tab === 'nutrition'  && <Nutrition />}
+
       <Nav active={tab} onNavigate={setTab} />
     </>
   )
