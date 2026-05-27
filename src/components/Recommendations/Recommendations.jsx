@@ -719,12 +719,14 @@ export default function Recommendations({ onStartSession }) {
   }
 
   const customWeights = Object.keys(goals).length > 0 ? goals : null
-  const { workoutPlans, topMuscles, message, insights, muscleScores } =
-    getRecommendations(sessions, profile, customWeights, sessionTypeId)
+  const { workoutPlans, topMuscles, message, insights, muscleScores } = useMemo(
+    () => getRecommendations(sessions, profile, customWeights, sessionTypeId),
+    [sessions, profile, customWeights, sessionTypeId]
+  )
   // Suppress auto-deload alerts when the active program already schedules a deload this week
-  const _progStatus = profile.program ? getProgramStatus(profile.program) : null
+  const _progStatus = useMemo(() => profile.program ? getProgramStatus(profile.program) : null, [profile.program])
   const programDeload = !!_progStatus && !_progStatus.notStarted && !_progStatus.finished && _progStatus.weekPlan?.deload
-  const deloadAlerts = programDeload ? [] : detectDeloadNeed(sessions)
+  const deloadAlerts = useMemo(() => programDeload ? [] : detectDeloadNeed(sessions), [programDeload, sessions])
 
   const sessionType = SESSION_TYPES[sessionTypeId]
 

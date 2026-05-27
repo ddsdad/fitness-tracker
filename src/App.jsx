@@ -64,6 +64,17 @@ function AppInner() {
           Syncing…
         </div>
       )}
+      {user && syncStatus === 'error' && (
+        <div style={{
+          position:'fixed', top:0, left:'50%', transform:'translateX(-50%)',
+          width:'100%', maxWidth:480, zIndex:200,
+          background:'rgba(239,68,68,0.15)', borderBottom:'1px solid rgba(239,68,68,0.35)',
+          padding:'4px 16px', fontSize:'0.7rem', color:'var(--red)',
+          display:'flex', alignItems:'center', gap:6,
+        }}>
+          ⚠️ Sync failed — saved on this device, will retry.
+        </div>
+      )}
 
       {tab === 'dashboard'  && <Dashboard onSignOut={signOut} />}
       {tab === 'workout'    && (

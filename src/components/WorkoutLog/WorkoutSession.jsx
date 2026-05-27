@@ -267,7 +267,7 @@ function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, 
           placeholder={suggestedWeight ? String(suggestedWeight) : '0'}
           value={set.weight || ''}
           style={{ padding: '8px 36px 8px 10px', fontSize: '0.9375rem', background: set.done ? 'rgba(34,197,94,0.08)' : undefined }}
-          onChange={e => onUpdate({ ...set, weight: parseFloat(e.target.value) || 0 })}
+          onChange={e => onUpdate({ ...set, weight: Math.min(2000, Math.max(0, parseFloat(e.target.value) || 0)) })}
         />
         <span style={{ right: 8, fontSize: '0.75rem', position: 'absolute', top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }}>{unit}</span>
       </div>
@@ -279,7 +279,7 @@ function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, 
         placeholder="0"
         value={set.reps || ''}
         style={{ padding: '8px 10px', fontSize: '0.9375rem', textAlign: 'center', background: set.done ? 'rgba(34,197,94,0.08)' : undefined }}
-        onChange={e => onUpdate({ ...set, reps: parseInt(e.target.value) || 0 })}
+        onChange={e => onUpdate({ ...set, reps: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
       />
 
       {/* Rest */}

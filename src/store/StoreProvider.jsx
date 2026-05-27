@@ -138,9 +138,12 @@ export function StoreProvider({ children }) {
     upsertLeaderboardStats(userId, name, stats).catch(e => console.warn('[lb]', e))
   }
 
-  // ── 5. Fire-and-forget helper ──────────────────────────────────────────────
+  // ── 5. Fire-and-forget helper (surfaces sync failures) ─────────────────────
   function push(fn) {
-    if (userRef.current) fn(userRef.current.id).catch(e => console.warn('[push]', e))
+    if (!userRef.current) return
+    fn(userRef.current.id)
+      .then(() => setSyncStatus(s => (s === 'error' ? 'synced' : s)))   // recover on next success
+      .catch(e => { console.warn('[push]', e); setSyncStatus('error') })
   }
 
   // ── 6. Store actions ───────────────────────────────────────────────────────

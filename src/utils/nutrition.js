@@ -234,9 +234,12 @@ const MEAL_FAT_POOLS = {
 }
 
 function pickFromPool(pool, usedIds = new Set()) {
-  const available = pool.filter(id => !usedIds.has(id))
-  if (!available.length) return pool[Math.floor(Math.random() * pool.length)]
-  return available[Math.floor(Math.random() * available.length)]
+  // only consider IDs that actually exist in the food DB (guards against stale pool entries)
+  const valid = pool.filter(id => FOOD_INDEX.has(id))
+  if (!valid.length) return null
+  const available = valid.filter(id => !usedIds.has(id))
+  const choices = available.length ? available : valid
+  return choices[Math.floor(Math.random() * choices.length)]
 }
 
 function gramsToHit(food, targetKcal) {

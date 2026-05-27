@@ -57,7 +57,9 @@ function weightChange(measurementHistory, days) {
   const cutoff = daysAgo(days).toISOString().slice(0, 10)
   const recent = recs[recs.length - 1].value
   const old = recs.find(r => r.date >= cutoff) || recs[0]
-  return +(recent - old.value).toFixed(2)
+  const change = recent - old.value
+  // cap absurd swings from bad data (±50 kg-equiv)
+  return +Math.max(-110, Math.min(110, change)).toFixed(2)
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
