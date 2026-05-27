@@ -232,12 +232,25 @@ function ExercisePicker({ onSelect, onClose }) {
 }
 
 // ── Set row ───────────────────────────────────────────────────────────────────
+const SET_TYPES = ['normal', 'drop', 'amrap', 'failure']
+const SET_TYPE_META = {
+  normal:  { color: 'var(--text3)' },
+  drop:    { label: 'D', color: 'var(--blue)',   title: 'Drop set' },
+  amrap:   { label: 'A', color: 'var(--green)',  title: 'AMRAP (as many reps as possible)' },
+  failure: { label: 'F', color: 'var(--red)',    title: 'To failure' },
+}
 function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, showPlates }) {
   const plates = showPlates && set.weight > 0 ? platesPerSide(set.weight) : null
+  const type = set.type || 'normal'
+  const meta = SET_TYPE_META[type]
+  const cycleType = () => { if (set.warmup) return; const i = SET_TYPES.indexOf(type); onUpdate({ ...set, type: SET_TYPES[(i + 1) % SET_TYPES.length] }) }
   return (
     <>
     <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', marginBottom: plates ? 2 : 8 }}>
-      <span style={{ color: set.warmup ? 'var(--yellow)' : 'var(--text3)', fontSize: '0.8125rem', textAlign: 'center', fontWeight: set.warmup ? 700 : 400 }}>{set.warmup ? 'W' : idx + 1}</span>
+      <button onClick={cycleType} title={set.warmup ? 'Warm-up' : (meta.title || 'Tap to tag set type')}
+        style={{ background: 'none', border: 'none', cursor: set.warmup ? 'default' : 'pointer', color: set.warmup ? 'var(--yellow)' : meta.color, fontSize: '0.8125rem', textAlign: 'center', fontWeight: (set.warmup || type !== 'normal') ? 700 : 400, padding: 0 }}>
+        {set.warmup ? 'W' : (meta.label || idx + 1)}
+      </button>
 
       {/* Weight */}
       <div className="input-unit" style={{ position: 'relative' }}>
@@ -391,6 +404,26 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
           </button>
         </div>
       )}
+
+      {/* %-of-1RM working-weight fill */}
+      {!isView && (() => {
+        const oneRM = Math.max(currentBest || 0, lastPerf?.e1rm || 0)
+        if (oneRM <= 0) return null
+        const fillPct = (pct) => {
+          const w = Math.round((oneRM * pct / 100) / 2.5) * 2.5
+          onUpdate({ ...exercise, sets: exercise.sets.map(s => s.warmup ? s : { ...s, weight: w }) })
+        }
+        return (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>% of {oneRM.toFixed(0)}kg 1RM:</span>
+            {[70, 75, 80, 85, 90].map(p => (
+              <button key={p} onClick={() => fillPct(p)} style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: 'pointer' }}>
+                {p}% · {Math.round((oneRM * p / 100) / 2.5) * 2.5}kg
+              </button>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Live 1RM */}
       {currentBest > 0 && (
