@@ -5,6 +5,7 @@ import { getCurrentWeek, getProgressStatus, getStatusLabel, detectTrainingLevel,
 import { caseyButtCeiling, lbmAndFat, navyBF } from '../../utils/calculations.js'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { IconPlus, IconCheck, IconArrowDown } from '../shared/Icons.jsx'
+import { e1rmTrend, topTrackedExercises, detectPlateau, weeklyVolumeSeries, bestWorstWeeks, gainRate, projectStrength } from '../../utils/analytics.js'
 
 // ── Streak calculation ────────────────────────────────────────────────────────
 function calcStreak(sessions) {
@@ -195,6 +196,101 @@ function HistorySparkline({ history, metric, color = 'var(--green)' }) {
         {diff >= 0 ? '▲' : '▼'} {Math.abs(diff)} since start · {recs.length} entries
       </div>
     </div>
+  )
+}
+
+// ── Insights / analytics tab ──────────────────────────────────────────────────
+function InsightsTab({ sessions, profile, measurementHistory }) {
+  const tracked = topTrackedExercises(sessions, 6)
+  const [exId, setExId] = useState(tracked[0]?.id || null)
+  const trend = exId ? e1rmTrend(sessions, exId) : []
+  const plateau = exId ? detectPlateau(sessions, exId) : null
+  const projection = projectStrength(trend)
+  const volSeries = weeklyVolumeSeries(sessions).slice(-10)
+  const bw = bestWorstWeeks(sessions)
+  const gain = gainRate(measurementHistory, profile.unit)
+
+  if (sessions.length === 0) {
+    return <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
+      <div style={{ fontSize: 40, marginBottom: 8 }}>📊</div>
+      Log a few workouts to unlock strength trends, plateau alerts and projections.
+    </div>
+  }
+
+  return (
+    <>
+      {/* Strength trend */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginBottom: 10 }}>Estimated 1RM Trend</h3>
+        {tracked.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 6 }}>
+            {tracked.map(t => (
+              <button key={t.id} onClick={() => setExId(t.id)} style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 999, border: `1px solid ${exId === t.id ? 'var(--green)' : 'var(--border)'}`, background: exId === t.id ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: exId === t.id ? 'var(--green)' : 'var(--text2)', fontSize: '0.7rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {trend.length >= 2 ? (
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={trend} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--bg4)" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} domain={['auto','auto']} />
+              <Tooltip contentStyle={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.8rem' }} />
+              <Line type="monotone" dataKey="e1rm" stroke="var(--green)" strokeWidth={2} dot={{ r: 3, fill: 'var(--green)' }} name="Est. 1RM" />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div style={{ color: 'var(--text3)', fontSize: '0.8125rem', padding: 16, textAlign: 'center' }}>Log this lift twice to see a trend.</div>
+        )}
+
+        {projection && projection.trending === 'up' && (
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--green)', background: 'rgba(34,197,94,0.08)', borderRadius: 8, padding: '8px 12px' }}>
+            📈 Trending +{projection.perWeek}{profile.unit}/wk — on pace for ~<strong>{projection.projected}{profile.unit}</strong> in {projection.weeksAhead} weeks.
+          </div>
+        )}
+        {plateau && (
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: '#f59e0b', background: 'rgba(245,158,11,0.08)', borderRadius: 8, padding: '8px 12px' }}>
+            ⚠️ Plateau: stalled near {plateau.stalledAt}{profile.unit} for ~{plateau.weeks} weeks. {plateau.suggestion}
+          </div>
+        )}
+      </div>
+
+      {/* Rate of gain */}
+      {gain && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginBottom: 10 }}>Bodyweight Rate of Change</h3>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'space-around', textAlign: 'center' }}>
+            <div><div style={{ fontSize: '1.5rem', fontWeight: 800, color: gain.perWeek >= 0 ? 'var(--green)' : 'var(--red)' }}>{gain.perWeek > 0 ? '+' : ''}{gain.perWeek}</div><div style={{ fontSize: '0.65rem', color: 'var(--text3)' }}>{profile.unit}/WEEK</div></div>
+            <div><div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{gain.totalChange > 0 ? '+' : ''}{gain.totalChange}</div><div style={{ fontSize: '0.65rem', color: 'var(--text3)' }}>TOTAL {profile.unit}</div></div>
+            <div><div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{gain.weeks}</div><div style={{ fontSize: '0.65rem', color: 'var(--text3)' }}>WEEKS</div></div>
+          </div>
+        </div>
+      )}
+
+      {/* Weekly volume + best/worst */}
+      {volSeries.length >= 2 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginBottom: 10 }}>Weekly Volume</h3>
+          <ResponsiveContainer width="100%" height={130}>
+            <LineChart data={volSeries} margin={{ top: 8, right: 8, bottom: 0, left: -10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--bg4)" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.8rem' }} />
+              <Line type="monotone" dataKey="volume" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} name="Volume (kg)" />
+            </LineChart>
+          </ResponsiveContainer>
+          {bw && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, fontSize: '0.75rem' }}>
+              <span style={{ flex: 1, background: 'rgba(34,197,94,0.08)', borderRadius: 8, padding: '6px 8px', color: 'var(--green)' }}>🔥 Best: wk {bw.best.label} ({(bw.best.volume/1000).toFixed(1)}k)</span>
+              <span style={{ flex: 1, background: 'var(--bg3)', borderRadius: 8, padding: '6px 8px', color: 'var(--text3)' }}>Low: wk {bw.worst.label} ({(bw.worst.volume/1000).toFixed(1)}k)</span>
+            </div>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -439,12 +535,14 @@ export default function Progress() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 20, gap: 2 }}>
-        {[['body', 'Body'], ['lifts', 'Lifts'], ['composition', 'Composition']].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '8px', borderRadius: 999, border: 'none', cursor: 'pointer', background: tab === id ? 'var(--bg2)' : 'transparent', color: tab === id ? 'var(--text)' : 'var(--text3)', fontWeight: tab === id ? 600 : 400, fontSize: '0.875rem', transition: 'all 0.15s' }}>
+        {[['body', 'Body'], ['lifts', 'Lifts'], ['composition', 'Comp'], ['insights', '📊 Insights']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '8px 4px', borderRadius: 999, border: 'none', cursor: 'pointer', background: tab === id ? 'var(--bg2)' : 'transparent', color: tab === id ? 'var(--text)' : 'var(--text3)', fontWeight: tab === id ? 600 : 400, fontSize: '0.8125rem', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
             {label}
           </button>
         ))}
       </div>
+
+      {tab === 'insights' && <InsightsTab sessions={sessions} profile={profile} measurementHistory={measurementHistory} />}
 
       {tab === 'body' && (
         <>

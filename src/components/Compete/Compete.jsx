@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useStore } from '../../store/useStore.js'
-import { fetchLeaderboard } from '../../lib/db.js'
+import { fetchLeaderboard, createLeague, joinLeague, leaveLeague, getMyLeagues, getLeagueMemberIds } from '../../lib/db.js'
 import { LEADERBOARD_CATEGORIES, getClimbHint, getRankEmoji } from '../../utils/leaderboard.js'
+import { computeAchievements, achievementSummary } from '../../utils/achievements.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function since(ts) {
@@ -102,14 +103,104 @@ function RankRow({ entry, rank, isMe, cat, leaderValue }) {
   )
 }
 
+// ── Achievements grid ─────────────────────────────────────────────────────────
+function AchievementsView() {
+  const { sessions, profile, measurementHistory, nutritionLogs } = useStore()
+  const achievements = computeAchievements({ sessions, profile, measurementHistory, nutritionLogs: nutritionLogs || {} })
+  const { earned, total } = achievementSummary(achievements)
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: '1.125rem' }}>Achievements</div>
+        <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--green)', fontWeight: 700 }}>{earned}/{total} unlocked</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {achievements.map(a => (
+          <div key={a.id} style={{
+            background: a.earned ? 'rgba(34,197,94,0.08)' : 'var(--bg2)',
+            border: `1px solid ${a.earned ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
+            borderRadius: 12, padding: '12px', opacity: a.earned ? 1 : 0.85,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: '1.5rem', filter: a.earned ? 'none' : 'grayscale(1)' }}>{a.emoji}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: a.earned ? 'var(--green)' : 'var(--text)' }}>{a.label}</div>
+              </div>
+              {a.earned && <span style={{ color: 'var(--green)' }}>✓</span>}
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 4, lineHeight: 1.3 }}>{a.desc}</div>
+            {!a.earned && (
+              <>
+                <div style={{ height: 4, background: 'var(--bg4)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${a.pct}%`, background: 'var(--blue)', borderRadius: 2 }} />
+                </div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text3)', marginTop: 3 }}>{a.current}/{a.target}</div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── League create/join modal ──────────────────────────────────────────────────
+function LeagueModal({ userId, onClose, onChanged }) {
+  const [mode, setMode] = useState('join') // 'join' | 'create'
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr]   = useState('')
+
+  const submit = async () => {
+    setBusy(true); setErr('')
+    try {
+      if (mode === 'create') { if (!name.trim()) { setErr('Enter a league name'); setBusy(false); return } await createLeague(userId, name.trim()) }
+      else { if (!code.trim()) { setErr('Enter a join code'); setBusy(false); return } await joinLeague(userId, code) }
+      onChanged(); onClose()
+    } catch (e) { setErr(e.message || 'Something went wrong') }
+    setBusy(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 400, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ background: 'var(--bg2)', width: '100%', maxWidth: 480, margin: '0 auto', padding: '20px 16px 32px', borderRadius: '16px 16px 0 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3>Friend League</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text2)', fontSize: '1.25rem', cursor: 'pointer' }}>✕</button>
+        </div>
+        <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 16 }}>
+          {[['join','Join'],['create','Create']].map(([id,l]) => (
+            <button key={id} onClick={() => { setMode(id); setErr('') }} style={{ flex: 1, padding: '8px', borderRadius: 999, border: 'none', cursor: 'pointer', background: mode === id ? 'var(--bg2)' : 'transparent', color: mode === id ? 'var(--green)' : 'var(--text3)', fontWeight: mode === id ? 700 : 400, fontSize: '0.875rem' }}>{l}</button>
+          ))}
+        </div>
+        {mode === 'create' ? (
+          <input className="input" placeholder="League name (e.g. Gym Bros)" value={name} onChange={e => setName(e.target.value)} style={{ marginBottom: 12 }} />
+        ) : (
+          <input className="input" placeholder="Enter 5-char join code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} maxLength={5} style={{ marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }} />
+        )}
+        {err && <p style={{ color: 'var(--red)', fontSize: '0.8rem', marginBottom: 10 }}>{err}</p>}
+        <button className="btn btn-primary btn-full" onClick={submit} disabled={busy}>{busy ? '…' : mode === 'create' ? 'Create League' : 'Join League'}</button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Compete view ─────────────────────────────────────────────────────────
 export default function Compete() {
   const { user, profile }    = useStore()
+  const [view, setView]      = useState('leaderboard') // 'leaderboard' | 'achievements'
   const [catId, setCatId]    = useState(LEADERBOARD_CATEGORIES[0].id)
   const [board, setBoard]    = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError]    = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
+  // Leagues
+  const [leagues, setLeagues]       = useState([])
+  const [activeLeague, setActiveLeague] = useState(null) // null = Global
+  const [leagueMembers, setLeagueMembers] = useState(null) // Set of user_ids or null
+  const [showLeagueModal, setShowLeagueModal] = useState(false)
 
   const cat = LEADERBOARD_CATEGORIES.find(c => c.id === catId) || LEADERBOARD_CATEGORIES[0]
 
@@ -126,7 +217,18 @@ export default function Compete() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const loadLeagues = useCallback(async () => {
+    if (!user) return
+    try { setLeagues(await getMyLeagues(user.id)) } catch {}
+  }, [user])
+
+  useEffect(() => { load(); loadLeagues() }, [load, loadLeagues])
+
+  // When a league is selected, fetch its member ids to filter the board
+  useEffect(() => {
+    if (!activeLeague) { setLeagueMembers(null); return }
+    getLeagueMemberIds(activeLeague.id).then(ids => setLeagueMembers(new Set(ids))).catch(() => setLeagueMembers(new Set()))
+  }, [activeLeague])
 
   if (!user) {
     return (
@@ -134,14 +236,15 @@ export default function Compete() {
         <div style={{ fontSize: 48, marginBottom: 16 }}>🏆</div>
         <h2 style={{ marginBottom: 8 }}>Sign In to Compete</h2>
         <p style={{ color: 'var(--text2)', fontSize: '0.9rem' }}>
-          Create an account to appear on the leaderboard and compete with other athletes.
+          Create an account to appear on the leaderboard, earn achievements, and join friend leagues.
         </p>
       </div>
     )
   }
 
-  // Sort by selected category (higher = better for all current cats)
-  const sorted = [...board].sort((a, b) => {
+  // Filter to active league members (if any), then sort by category
+  const scoped = (activeLeague && leagueMembers) ? board.filter(r => leagueMembers.has(r.user_id)) : board
+  const sorted = [...scoped].sort((a, b) => {
     const av = a.stats?.[cat.key] ?? 0
     const bv = b.stats?.[cat.key] ?? 0
     return cat.higherIsBetter ? bv - av : av - bv
@@ -156,12 +259,45 @@ export default function Compete() {
 
   return (
     <div>
+      {/* View toggle */}
+      <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 16, gap: 2 }}>
+        {[['leaderboard', '🏆 Leaderboard'], ['achievements', '🎖️ Achievements']].map(([id, label]) => (
+          <button key={id} onClick={() => setView(id)} style={{ flex: 1, padding: '8px', borderRadius: 999, border: 'none', cursor: 'pointer', background: view === id ? 'var(--bg2)' : 'transparent', color: view === id ? 'var(--green)' : 'var(--text3)', fontWeight: view === id ? 700 : 400, fontSize: '0.8125rem' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'achievements' && <AchievementsView />}
+
+      {view === 'leaderboard' && <>
+      {showLeagueModal && <LeagueModal userId={user.id} onClose={() => setShowLeagueModal(false)} onChanged={loadLeagues} />}
+
+      {/* League selector */}
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 12 }}>
+        <button onClick={() => setActiveLeague(null)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 999, border: `1px solid ${!activeLeague ? 'var(--green)' : 'var(--border)'}`, background: !activeLeague ? 'rgba(34,197,94,0.12)' : 'var(--bg3)', color: !activeLeague ? 'var(--green)' : 'var(--text2)', fontSize: '0.78rem', fontWeight: !activeLeague ? 700 : 400, cursor: 'pointer', whiteSpace: 'nowrap' }}>🌍 Global</button>
+        {leagues.map(lg => (
+          <button key={lg.id} onClick={() => setActiveLeague(lg)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 999, border: `1px solid ${activeLeague?.id === lg.id ? 'var(--green)' : 'var(--border)'}`, background: activeLeague?.id === lg.id ? 'rgba(34,197,94,0.12)' : 'var(--bg3)', color: activeLeague?.id === lg.id ? 'var(--green)' : 'var(--text2)', fontSize: '0.78rem', fontWeight: activeLeague?.id === lg.id ? 700 : 400, cursor: 'pointer', whiteSpace: 'nowrap' }}>👥 {lg.name}</button>
+        ))}
+        <button onClick={() => setShowLeagueModal(true)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 999, border: '1px dashed var(--border)', background: 'var(--bg3)', color: 'var(--text2)', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>＋ League</button>
+      </div>
+
+      {/* Active league info */}
+      {activeLeague && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', marginBottom: 12 }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>Join code:</span>
+          <span style={{ fontWeight: 800, letterSpacing: '0.12em', color: 'var(--green)' }}>{activeLeague.code}</span>
+          <button onClick={() => { try { navigator.clipboard?.writeText(activeLeague.code) } catch {} }} style={{ background: 'var(--bg3)', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: '0.7rem', color: 'var(--text2)', cursor: 'pointer' }}>Copy</button>
+          <button onClick={async () => { if (confirm(`Leave ${activeLeague.name}?`)) { await leaveLeague(user.id, activeLeague.id); setActiveLeague(null); loadLeagues() } }} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: '0.7rem', color: 'var(--text3)', cursor: 'pointer', textDecoration: 'underline' }}>Leave</button>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>Leaderboard</h2>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>{activeLeague ? activeLeague.name : 'Global Leaderboard'}</h2>
           <p style={{ color: 'var(--text2)', fontSize: '0.8rem', marginTop: 2 }}>
-            {board.length} athlete{board.length !== 1 ? 's' : ''} competing
+            {scoped.length} athlete{scoped.length !== 1 ? 's' : ''} competing
           </p>
         </div>
         <button
@@ -261,6 +397,7 @@ export default function Compete() {
           Last updated {lastRefresh.toLocaleTimeString()}
         </p>
       )}
+      </>}
     </div>
   )
 }

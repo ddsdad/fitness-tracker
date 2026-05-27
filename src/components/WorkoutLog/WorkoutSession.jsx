@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore.js'
 import { EXERCISES, searchExercises } from '../../data/exercises.js'
 import { MUSCLE_GROUPS } from '../../data/muscles.js'
 import { epley1RM } from '../../utils/calculations.js'
+import { postSessionFeedback } from '../../utils/coach.js'
 import { IconPlus, IconX, IconCheck, IconTimer, IconTrash, IconChevronLeft } from '../shared/Icons.jsx'
 
 function genId() { return Math.random().toString(36).slice(2) }
@@ -424,6 +425,7 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
   const [showPicker, setShowPicker] = useState(false)
   const [startTime]             = useState(new Date())
   const [saving, setSaving]     = useState(false)
+  const [feedback, setFeedback] = useState(null)
 
   const isView = mode === 'view'
 
@@ -482,8 +484,11 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
       estimatedTUT: calcTUT(exercises),
       duration: duration || 1,
     }
+    // Compute coach feedback BEFORE adding (so priorSessions excludes this one)
+    const fb = profile ? postSessionFeedback(session, sessions, profile) : null
     addSession(session)
-    onDone()
+    if (fb) setFeedback(fb)
+    else onDone()
   }
 
   const handleDelete = () => {
@@ -491,6 +496,22 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
       deleteSession(initialSession.id)
       onDone()
     }
+  }
+
+  // Post-session coach feedback overlay
+  if (feedback) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
+        <div style={{ fontSize: 56, marginBottom: 12 }}>{feedback.prs.length ? '🏆' : '💪'}</div>
+        <h2 style={{ marginBottom: 8 }}>{feedback.headline}</h2>
+        <div style={{ maxWidth: 360, marginBottom: 24 }}>
+          {feedback.lines.map((l, i) => (
+            <p key={i} style={{ color: 'var(--text2)', fontSize: '0.9rem', lineHeight: 1.6, marginTop: 6 }}>{l}</p>
+          ))}
+        </div>
+        <button className="btn btn-primary btn-full" style={{ maxWidth: 320 }} onClick={onDone}>Done</button>
+      </div>
+    )
   }
 
   return (

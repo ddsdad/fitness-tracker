@@ -7,6 +7,7 @@ import { MUSCLE_GROUPS, RP_VOLUME } from '../../data/muscles.js'
 import { getCurrentWeek } from '../../utils/milestones.js'
 import { structuralRiskScore } from '../../utils/balance.js'
 import { getWeekScheduleData } from '../../utils/recommendations.js'
+import { weeklyReport } from '../../utils/coach.js'
 import Compete from '../Compete/Compete.jsx'
 
 const TIME_WINDOWS = [{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: 'All', days: 365 }]
@@ -166,7 +167,7 @@ const LEGEND = [
 ]
 
 export default function Dashboard() {
-  const { profile, sessions, goals } = useStore()
+  const { profile, sessions, goals, nutritionLogs } = useStore()
   const [window_, setWindow_] = useState(7)
   const [activeMuscle, setActiveMuscle] = useState(null)
   const [tab, setTab] = useState('heatmap') // heatmap | schedule | compete | stats
@@ -238,6 +239,33 @@ export default function Dashboard() {
 
       {tab === 'heatmap' && (
         <>
+          {/* Weekly coach report */}
+          {(() => {
+            const r = weeklyReport(sessions, profile, nutritionLogs || {})
+            return (
+              <div className="card" style={{ marginBottom: 16, borderColor: 'rgba(34,197,94,0.25)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: '1.125rem' }}>🧠</span>
+                  <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>This Week</span>
+                  {r.volChange != null && (
+                    <span style={{ marginLeft: 'auto', fontSize: '0.75rem', fontWeight: 700, color: r.volChange >= 0 ? 'var(--green)' : '#f59e0b' }}>
+                      {r.volChange >= 0 ? '▲' : '▼'} {Math.abs(r.volChange)}% volume
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--text)', fontWeight: 600 }}>{r.verdict}</div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginTop: 4, lineHeight: 1.5 }}>{r.focus}</div>
+                {r.hasData && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, fontSize: '0.7rem' }}>
+                    <span style={{ flex: 1, textAlign: 'center', background: 'var(--bg3)', borderRadius: 8, padding: '6px 4px' }}><strong style={{ fontSize: '0.95rem', display: 'block', color: 'var(--green)' }}>{r.sessionCount}</strong>sessions</span>
+                    <span style={{ flex: 1, textAlign: 'center', background: 'var(--bg3)', borderRadius: 8, padding: '6px 4px' }}><strong style={{ fontSize: '0.95rem', display: 'block' }}>{r.volume >= 1000 ? (r.volume/1000).toFixed(1)+'k' : r.volume}</strong>volume</span>
+                    <span style={{ flex: 1, textAlign: 'center', background: 'var(--bg3)', borderRadius: 8, padding: '6px 4px' }}><strong style={{ fontSize: '0.95rem', display: 'block' }}>{r.proteinDays}/7</strong>protein days</span>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           {/* Imbalance warnings */}
           {risk.imbalances.length > 0 && (
             <div style={{ marginBottom: 16 }}>
