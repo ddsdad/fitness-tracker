@@ -1,5 +1,6 @@
 // ── Leaderboard stat computation ──────────────────────────────────────────────
 // All inputs are already in the user's chosen unit (kg or lbs).
+import { dotsScore, bigThreeTotalKg } from './strength.js'
 
 const MS_DAY = 86_400_000
 
@@ -91,6 +92,7 @@ export function computeLeaderboardStats(profile, sessions, checkins, measurement
     bodyweight:       profile?.bodyweight || 0,
     weightChangeWeek: weightChange(measurementHistory, 7),
     weightChangeMonth: weightChange(measurementHistory, 30),
+    dots:             dotsScore(bigThreeTotalKg(profile), unit === 'lbs' ? (profile?.bodyweight||0)/2.2046 : (profile?.bodyweight||0), profile?.gender || 'male'),
     unit,
   }
 }
@@ -165,6 +167,16 @@ export const LEADERBOARD_CATEGORIES = [
     key: 'sessionsMonth',
     format: v => `${v} sessions`,
     hintFn: (diff) => `Log ${Math.ceil(diff)} more session${Math.ceil(diff) !== 1 ? 's' : ''} this month`,
+    higherIsBetter: true,
+  },
+  {
+    id: 'dots',
+    label: 'Pound-for-Pound',
+    emoji: '⚖️',
+    period: 'DOTS Score',
+    key: 'dots',
+    format: v => `${v} DOTS`,
+    hintFn: (diff) => `Add ${Math.ceil(diff)} DOTS (get stronger relative to bodyweight)`,
     higherIsBetter: true,
   },
 ]

@@ -258,6 +258,18 @@ export function StoreProvider({ children }) {
     setProfile({ ...p, game })
   }, [setProfile])
 
+  const useStreakShield = useCallback((dateStr) => {
+    const p = storage.getProfile(); if (!p) return false
+    const game = { ...(p.game || {}) }
+    if ((game.shields || 0) <= 0) return false
+    const covered = game.shieldDates || []
+    if (covered.includes(dateStr)) return false
+    game.shields -= 1
+    game.shieldDates = [...covered, dateStr]
+    setProfile({ ...p, game })
+    return true
+  }, [setProfile])
+
   const equipTheme = useCallback((themeId) => {
     const p = storage.getProfile(); if (!p) return
     const game = p.game || {}
@@ -276,6 +288,7 @@ export function StoreProvider({ children }) {
     let message = `Purchased ${item.name}`
     if (item.kind === 'theme')      { game.owned = [...owned, item.id]; game.theme = item.themeId; message = `${THEMES[item.themeId].name} unlocked & equipped!` }
     else if (item.kind === 'title') { game.owned = [...owned, item.id]; game.title = item.title; message = `Title "${item.title}" equipped!` }
+    else if (item.kind === 'shield')  { game.shields = (game.shields || 0) + 1; message = `🛡️ Streak Shield added (${game.shields} owned)` }
     else if (item.kind === 'mystery') { const box = openMysteryBox(); game.questCoins = (game.questCoins || 0) + box.amount; message = `🎁 ${box.label === 'JACKPOT 🎉' ? box.label + ' ' : 'You won '}${box.amount} coins!` }
     else if (item.kind === 'cookbook') {
       const recs = buildCookbookRecipes(item.pack)
@@ -352,7 +365,7 @@ export function StoreProvider({ children }) {
       customExercises, addCustomExercise,
       routines, addRoutine, deleteRoutine,
       convertAllUnits,
-      completeQuest, equipTheme, buyShopItem,
+      completeQuest, equipTheme, buyShopItem, useStreakShield,
       loaded, resetApp,
       user, syncStatus, signOut,
     }}>

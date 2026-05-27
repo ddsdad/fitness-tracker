@@ -8,12 +8,14 @@ import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
-function calcStreak(sessions) {
+function calcStreak(sessions, shieldDates = []) {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const set = new Set(sessions.map(s => { const d = new Date(s.date); d.setHours(0,0,0,0); return d.getTime() }))
+  const shields = new Set(shieldDates.map(ds => { const d = new Date(ds + 'T00:00:00'); d.setHours(0,0,0,0); return d.getTime() }))
+  const covered = (t) => set.has(t) || shields.has(t)
   let streak = 0, check = new Date(today)
   for (let i = 0; i < 365; i++) {
-    if (set.has(check.getTime())) { streak++; check.setDate(check.getDate() - 1) }
+    if (covered(check.getTime())) { streak++; check.setDate(check.getDate() - 1) }
     else if (i === 0) check.setDate(check.getDate() - 1)
     else break
   }
@@ -35,7 +37,7 @@ function Ring({ pct, color, size = 64, children }) {
 }
 
 export default function Today({ onNavigate, onStartSession, embedded = false }) {
-  const { profile, sessions, nutritionLogs, measurementHistory, completeQuest } = useStore()
+  const { profile, sessions, nutritionLogs, measurementHistory, completeQuest, useStreakShield } = useStore()
 
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening' })()
   const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -61,7 +63,7 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
   const pLeft = Math.max(0, targets.protein - consumed.protein)
 
   // ── Streak + next PR ──
-  const streak = calcStreak(sessions)
+  const streak = calcStreak(sessions, profile?.game?.shieldDates || [])
   const { feed } = useMemo(() => computePRs(sessions), [sessions])
   const lastPR = feed[0]
   const u = profile?.unit || 'kg'
@@ -200,6 +202,15 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
           )}
         </div>
       </div>
+
+      {/* ── Streak shield ── */}
+      {!trainedToday && (profile?.game?.shields || 0) > 0 && !(profile?.game?.shieldDates || []).includes(TODAY) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 10 }}>
+          <span>🛡️</span>
+          <div style={{ flex: 1, fontSize: '0.82rem', color: 'var(--text2)' }}>Can't train today? Use a Streak Shield to protect your {streak}-day streak ({profile.game.shields} owned).</div>
+          <button onClick={() => useStreakShield(TODAY)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 999, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Use</button>
+        </div>
+      )}
 
       {/* ── Nudges ── */}
       {!weighedToday && (

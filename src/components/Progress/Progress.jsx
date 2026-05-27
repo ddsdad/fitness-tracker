@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { useStore } from '../../store/useStore.js'
 import { getCurrentWeek, getProgressStatus, getStatusLabel, detectTrainingLevel, TRAINING_LEVEL_META } from '../../utils/milestones.js'
-import { caseyButtCeiling, lbmAndFat, navyBF, epley1RM } from '../../utils/calculations.js'
+import { caseyButtCeiling, lbmAndFat, navyBF, epley1RM, ffmi } from '../../utils/calculations.js'
+import { dotsScore, dotsTier, bigThreeTotalKg, acwr } from '../../utils/strength.js'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { IconPlus, IconCheck, IconArrowDown } from '../shared/Icons.jsx'
 import { e1rmTrend, topTrackedExercises, detectPlateau, weeklyVolumeSeries, bestWorstWeeks, gainRate, projectStrength, computePRs, exerciseDetail } from '../../utils/analytics.js'
@@ -302,6 +303,35 @@ function InsightsTab({ sessions, profile, measurementHistory }) {
   return (
     <>
       {detailEx && <ExerciseDetailModal sessions={sessions} exerciseId={detailEx.id} name={detailEx.name} unit={u} onClose={() => setDetailEx(null)} />}
+
+      {/* Strength score (DOTS) + injury risk (ACWR) */}
+      {(() => {
+        const bwKg = profile.unit === 'kg' ? profile.bodyweight : profile.bodyweight / 2.2046
+        const dots = dotsScore(bigThreeTotalKg(profile), bwKg, profile.gender || 'male')
+        const tier = dotsTier(dots)
+        const risk = acwr(sessions)
+        if (dots <= 0 && !risk) return null
+        return (
+          <div className="grid-2" style={{ marginBottom: 16 }}>
+            {dots > 0 && (
+              <div className="card" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Strength Score</div>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: tier.color, marginTop: 4 }}>{dots}</div>
+                <div style={{ fontSize: '0.72rem', color: tier.color, fontWeight: 700 }}>{tier.label} · DOTS</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text3)', marginTop: 2 }}>bodyweight-adjusted big-3</div>
+              </div>
+            )}
+            {risk && (
+              <div className="card" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Injury Risk</div>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: risk.color, marginTop: 4 }}>{risk.ratio}</div>
+                <div style={{ fontSize: '0.72rem', color: risk.color, fontWeight: 700 }}>{risk.zone}</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text3)', marginTop: 2 }}>workload ratio (ACWR)</div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Rep-max calculator */}
       <RepMaxCalc unit={u} />
@@ -624,6 +654,13 @@ export default function Progress() {
             ? `~${remainingKg}kg of lean mass remaining before genetic ceiling`
             : 'You\'re at or beyond your estimated natural potential 🏆'}
         </div>
+        {(() => {
+          const f = ffmi(currentLBM, ht_cm)
+          if (!f?.normalized) return null
+          return <div style={{ fontSize: '0.75rem', color: 'var(--text3)', marginTop: 6 }}>
+            FFMI <strong style={{ color: 'var(--text2)' }}>{f.normalized}</strong> — {f.normalized >= 25 ? 'at the natural ceiling (~25)' : f.normalized >= 22 ? 'well-built, advanced' : f.normalized >= 20 ? 'solid, intermediate' : 'building'}
+          </div>
+        })()}
       </div>
 
       {/* Caloric mode */}

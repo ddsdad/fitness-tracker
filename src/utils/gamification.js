@@ -161,6 +161,7 @@ export const SHOP = [
   { id: 'theme_gold',    kind: 'theme', themeId: 'gold',    name: 'Champion Gold theme', emoji: '🥇', price: 400 },
   { id: 'theme_sunset',  kind: 'theme', themeId: 'sunset',  name: 'Sunset Orange theme', emoji: '🌅', price: 450 },
   { id: 'theme_neon',    kind: 'theme', themeId: 'neon',    name: 'Neon Mint theme',     emoji: '💚', price: 500 },
+  { id: 'streak_shield', kind: 'shield', name: 'Streak Shield', emoji: '🛡️', price: 150, repeatable: true, desc: 'Protects your streak for one missed day' },
   { id: 'mystery',       kind: 'mystery', name: 'Mystery Box', emoji: '🎁', price: 150, repeatable: true, desc: 'Random reward — could be a jackpot!' },
   { id: 'cookbook_bulk', kind: 'cookbook', pack: 'bulk',  name: 'High-Protein Bulk Cookbook', emoji: '📗', price: 500, desc: '4 calorie-dense muscle-building recipes' },
   { id: 'cookbook_cut',  kind: 'cookbook', pack: 'cut',   name: 'Lean & Shredded Cookbook',   emoji: '📕', price: 500, desc: '4 high-volume low-cal recipes' },
