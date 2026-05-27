@@ -47,27 +47,34 @@ function getLastPerf(exerciseId, sessions) {
   return null
 }
 
-// ── Plate calculator (per side, 20 kg Olympic bar) ────────────────────────────
-const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 1.25]
-function platesPerSide(target, bar = 20) {
+// ── Plate calculator (unit-aware) ─────────────────────────────────────────────
+function plateConfig(unit) {
+  return unit === 'lbs'
+    ? { plates: [45, 35, 25, 10, 5, 2.5], bar: 45, inc: 5 }
+    : { plates: [25, 20, 15, 10, 5, 2.5, 1.25], bar: 20, inc: 2.5 }
+}
+function platesPerSide(target, unit = 'kg') {
+  const { plates, bar } = plateConfig(unit)
   let perSide = (target - bar) / 2
   if (perSide <= 0) return []
   const out = []
-  for (const p of PLATES_KG) {
+  for (const p of plates) {
     while (perSide >= p - 1e-9) { out.push(p); perSide = +(perSide - p).toFixed(3) }
   }
   return out
 }
 
-// ── Warm-up ramp from a top working weight ────────────────────────────────────
-function warmupRamp(topWeight, bar = 20) {
+// ── Warm-up ramp from a top working weight (unit-aware rounding) ──────────────
+function warmupRamp(topWeight, unit = 'kg') {
+  const { bar, inc } = plateConfig(unit)
   if (!topWeight || topWeight <= bar) return []
   return [
     { pct: 0.40, reps: 8 },
     { pct: 0.60, reps: 5 },
     { pct: 0.80, reps: 3 },
-  ].map(w => ({ weight: Math.max(bar, Math.round(topWeight * w.pct / 2.5) * 2.5), reps: w.reps }))
+  ].map(w => ({ weight: Math.max(bar, Math.round(topWeight * w.pct / inc) * inc), reps: w.reps }))
 }
+const roundToInc = (w, unit) => { const { inc } = plateConfig(unit); return Math.round(w / inc) * inc }
 
 // ── Progressive overload suggestion ──────────────────────────────────────────
 function progressionSuggestion(lastSets) {
@@ -239,8 +246,8 @@ const SET_TYPE_META = {
   amrap:   { label: 'A', color: 'var(--green)',  title: 'AMRAP (as many reps as possible)' },
   failure: { label: 'F', color: 'var(--red)',    title: 'To failure' },
 }
-function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, showPlates }) {
-  const plates = showPlates && set.weight > 0 ? platesPerSide(set.weight) : null
+function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, showPlates, unit = 'kg' }) {
+  const plates = showPlates && set.weight > 0 ? platesPerSide(set.weight, unit) : null
   const type = set.type || 'normal'
   const meta = SET_TYPE_META[type]
   const cycleType = () => { if (set.warmup) return; const i = SET_TYPES.indexOf(type); onUpdate({ ...set, type: SET_TYPES[(i + 1) % SET_TYPES.length] }) }
@@ -262,7 +269,7 @@ function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, 
           style={{ padding: '8px 36px 8px 10px', fontSize: '0.9375rem', background: set.done ? 'rgba(34,197,94,0.08)' : undefined }}
           onChange={e => onUpdate({ ...set, weight: parseFloat(e.target.value) || 0 })}
         />
-        <span style={{ right: 8, fontSize: '0.75rem', position: 'absolute', top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }}>kg</span>
+        <span style={{ right: 8, fontSize: '0.75rem', position: 'absolute', top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }}>{unit}</span>
       </div>
 
       {/* Reps */}
@@ -295,7 +302,7 @@ function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, 
     </div>
     {plates && (
       <div style={{ gridColumn: '2 / 5', fontSize: '0.7rem', color: 'var(--text3)', marginBottom: 8, paddingLeft: 4 }}>
-        🏋️ Per side: {plates.length ? plates.map(p => `${p}`).join(' + ') + ' kg' : 'just the bar (20kg)'}
+        🏋️ Per side: {plates.length ? plates.map(p => `${p}`).join(' + ') + ` ${unit}` : `just the bar (${plateConfig(unit).bar}${unit})`}
       </div>
     )}
     </>
@@ -303,7 +310,7 @@ function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, 
 }
 
 // ── Single exercise block ─────────────────────────────────────────────────────
-function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, isView }) {
+function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, isView, unit = 'kg' }) {
   const [showTimer, setShowTimer] = useState(false)
   const [timerSecs, setTimerSecs] = useState(90)
   const [showPlates, setShowPlates] = useState(false)
@@ -324,7 +331,7 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
   // Prepend warm-up sets based on the heaviest working weight entered (or suggestion)
   const addWarmup = () => {
     const topW = Math.max(...exercise.sets.map(s => s.weight || 0), suggestion?.suggestedWeight || 0)
-    const ramp = warmupRamp(topW)
+    const ramp = warmupRamp(topW, unit)
     if (!ramp.length) return
     const warm = ramp.map(w => ({ id: genId(), weight: w.weight, reps: w.reps, restSeconds: 60, done: false, warmup: true }))
     const working = exercise.sets.filter(s => !s.warmup)
@@ -410,15 +417,15 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
         const oneRM = Math.max(currentBest || 0, lastPerf?.e1rm || 0)
         if (oneRM <= 0) return null
         const fillPct = (pct) => {
-          const w = Math.round((oneRM * pct / 100) / 2.5) * 2.5
+          const w = roundToInc(oneRM * pct / 100, unit)
           onUpdate({ ...exercise, sets: exercise.sets.map(s => s.warmup ? s : { ...s, weight: w }) })
         }
         return (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>% of {oneRM.toFixed(0)}kg 1RM:</span>
+            <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>% of {oneRM.toFixed(0)}{unit} 1RM:</span>
             {[70, 75, 80, 85, 90].map(p => (
               <button key={p} onClick={() => fillPct(p)} style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: 'pointer' }}>
-                {p}% · {Math.round((oneRM * p / 100) / 2.5) * 2.5}kg
+                {p}% · {roundToInc(oneRM * p / 100, unit)}{unit}
               </button>
             ))}
           </div>
@@ -457,6 +464,7 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
           onSetComplete={handleSetComplete}
           suggestedWeight={!lastPerfSummary && suggestion ? suggestion.suggestedWeight : suggestion?.lastWeight}
           showPlates={showPlates}
+          unit={unit}
         />
       ))}
 
@@ -668,6 +676,7 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
             defaultRest={90}
             lastPerf={getLastPerf(ex.exerciseId, sessions)}
             isView={isView}
+            unit={profile?.unit || 'kg'}
           />
         ))}
 

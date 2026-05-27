@@ -61,29 +61,35 @@ function weightChange(measurementHistory, days) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
+// Anti-cheat sanity ceilings (well beyond world records, in kg-equivalent)
+const CAP = { lift: 600, volumeWeek: 200000, sessionsWeek: 21, sessionsMonth: 90, streak: 366 }
+const clamp = (v, max) => Math.max(0, Math.min(v || 0, max))
+
 export function computeLeaderboardStats(profile, sessions, checkins, measurementHistory) {
   const liftMaxes = profile?.liftMaxes || {}
+  const unit = profile?.unit || 'kg'
+  const liftCap = unit === 'lbs' ? CAP.lift * 2.2046 : CAP.lift
 
   // Lift PRs: use profile value OR best checkin value (whichever is higher)
   const bestLift = (key) => {
     const base = liftMaxes[key] || 0
     const best = checkins.reduce((m, c) => Math.max(m, c.liftMaxes?.[key] || 0), 0)
-    return Math.max(base, best)
+    return clamp(Math.max(base, best), liftCap)
   }
 
   return {
-    sessionsWeek:     sessionsInLast(sessions, 7),
-    sessionsMonth:    sessionsInLast(sessions, 30),
+    sessionsWeek:     clamp(sessionsInLast(sessions, 7), CAP.sessionsWeek),
+    sessionsMonth:    clamp(sessionsInLast(sessions, 30), CAP.sessionsMonth),
     sessionsAllTime:  sessions.length,
-    volumeWeek:       Math.round(volumeInLast(sessions, 7)),
-    streak:           calcStreak(sessions),
+    volumeWeek:       clamp(Math.round(volumeInLast(sessions, 7)), CAP.volumeWeek),
+    streak:           clamp(calcStreak(sessions), CAP.streak),
     benchPR:          bestLift('bench'),
     squatPR:          bestLift('squat'),
     deadliftPR:       bestLift('deadlift'),
     bodyweight:       profile?.bodyweight || 0,
     weightChangeWeek: weightChange(measurementHistory, 7),
     weightChangeMonth: weightChange(measurementHistory, 30),
-    unit:             profile?.unit || 'kg',
+    unit,
   }
 }
 

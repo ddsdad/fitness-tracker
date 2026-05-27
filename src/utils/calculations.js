@@ -4,10 +4,17 @@ export const kgToLbs = (kg) => kg * 2.2046
 export const lbsToKg = (lbs) => lbs / 2.2046
 export const inToCm = (in_) => in_ * 2.54
 
-// ─── Epley 1RM ──────────────────────────────────────────────────────────────
+// ─── Estimated 1RM (blended) ──────────────────────────────────────────────────
+// Averages Epley, Brzycki and Lombardi for better accuracy across rep ranges.
+// Reps are capped at 12 — beyond that, 1RM estimates are unreliable for any formula.
 export function epley1RM(weight, reps) {
+  if (!weight || !reps || reps < 1) return 0
   if (reps === 1) return weight
-  return weight * (1 + reps / 30)
+  const r = Math.min(reps, 12)
+  const epley    = weight * (1 + r / 30)
+  const brzycki  = weight * (36 / (37 - r))
+  const lombardi = weight * Math.pow(r, 0.10)
+  return (epley + brzycki + lombardi) / 3
 }
 
 // ─── US Navy Body Fat % ─────────────────────────────────────────────────────
