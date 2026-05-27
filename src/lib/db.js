@@ -2,13 +2,14 @@ import { supabase } from './supabase.js'
 
 // ─── Load all user data from Supabase ────────────────────────────────────────
 export async function loadUserData(userId) {
-  const [profileRes, sessionsRes, checkinsRes, goalsRes, nutritionRes, mhistoryRes] = await Promise.all([
+  const [profileRes, sessionsRes, checkinsRes, goalsRes, nutritionRes, mhistoryRes, recipesRes] = await Promise.all([
     supabase.from('profiles').select('data').eq('user_id', userId).maybeSingle(),
     supabase.from('workout_sessions').select('id, data').eq('user_id', userId),
     supabase.from('checkins').select('week, data').eq('user_id', userId),
     supabase.from('goals').select('data').eq('user_id', userId).maybeSingle(),
     supabase.from('nutrition_logs').select('date, data').eq('user_id', userId),
     supabase.from('measurement_history').select('id, date, metric, value, unit').eq('user_id', userId),
+    supabase.from('recipes').select('data').eq('user_id', userId).maybeSingle(),
   ])
 
   return {
@@ -18,6 +19,7 @@ export async function loadUserData(userId) {
     goals:              goalsRes.data?.data      || {},
     nutritionLogs:      Object.fromEntries((nutritionRes.data || []).map(n => [n.date, n.data])),
     measurementHistory: mhistoryRes.data || [],
+    recipes:            recipesRes.data?.data || [],
   }
 }
 
@@ -103,6 +105,12 @@ export async function fetchLeaderboard() {
   return data || []
 }
 
+// ─── Recipes ──────────────────────────────────────────────────────────────────
+export async function saveRecipes(userId, data) {
+  const { error } = await supabase.from('recipes').upsert({ user_id: userId, data, updated_at: new Date().toISOString() })
+  if (error) throw error
+}
+
 // ─── Friend leagues ───────────────────────────────────────────────────────────
 function genCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -156,7 +164,7 @@ export async function getLeagueMemberIds(leagueId) {
 }
 
 // ─── Upload local data to Supabase (first sign-in migration) ─────────────────
-export async function uploadLocalData(userId, { profile, sessions, checkins, goals, nutritionLogs, measurementHistory = [] }) {
+export async function uploadLocalData(userId, { profile, sessions, checkins, goals, nutritionLogs, measurementHistory = [], recipes = [] }) {
   const ops = []
   if (profile)                         ops.push(saveProfile(userId, profile))
   for (const s of sessions)            ops.push(saveSession(userId, s))
@@ -164,5 +172,6 @@ export async function uploadLocalData(userId, { profile, sessions, checkins, goa
   if (Object.keys(goals).length > 0)   ops.push(saveGoals(userId, goals))
   for (const [date, log] of Object.entries(nutritionLogs)) ops.push(saveNutritionLog(userId, date, log))
   if (measurementHistory.length > 0)   ops.push(saveMeasurementEntries(userId, measurementHistory))
+  if (recipes.length > 0)              ops.push(saveRecipes(userId, recipes))
   await Promise.allSettled(ops)
 }

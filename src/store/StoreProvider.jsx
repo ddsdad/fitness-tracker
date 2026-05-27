@@ -6,7 +6,7 @@ import {
   loadUserData, uploadLocalData,
   saveProfile, saveSession, removeSession,
   saveCheckin, saveGoals, saveNutritionLog,
-  saveMeasurementEntries, upsertLeaderboardStats,
+  saveMeasurementEntries, upsertLeaderboardStats, saveRecipes,
 } from '../lib/db.js'
 import { computeLeaderboardStats } from '../utils/leaderboard.js'
 
@@ -17,6 +17,7 @@ export function StoreProvider({ children }) {
   const [goals,              setGoalsState]           = useState({})
   const [nutritionLogs,      setNutritionLogsState]   = useState({})
   const [measurementHistory, setMeasurementHistoryState] = useState([])
+  const [recipes,            setRecipesState]         = useState([])
   const [loaded,             setLoaded]               = useState(false)
   const [user,               setUser]                 = useState(null)
   const [syncStatus,         setSyncStatus]           = useState('idle')
@@ -37,6 +38,7 @@ export function StoreProvider({ children }) {
     setGoalsState(storage.getGoals())
     setNutritionLogsState(storage.getNutritionLogs())
     setMeasurementHistoryState(storage.getMeasurementHistory())
+    setRecipesState(storage.getRecipes())
     setLoaded(true)
   }, [])
 
@@ -76,6 +78,10 @@ export function StoreProvider({ children }) {
           storage.setMeasurementHistory(remote.measurementHistory)
           setMeasurementHistoryState(remote.measurementHistory)
         }
+        if (remote.recipes?.length) {
+          storage.setRecipes(remote.recipes)
+          setRecipesState(remote.recipes)
+        }
       } else {
         await uploadLocalData(userId, {
           profile:            storage.getProfile()            || {},
@@ -84,6 +90,7 @@ export function StoreProvider({ children }) {
           goals:              storage.getGoals()              || {},
           nutritionLogs:      storage.getNutritionLogs()      || {},
           measurementHistory: storage.getMeasurementHistory() || [],
+          recipes:            storage.getRecipes()            || [],
         })
       }
       setSyncStatus('synced')
@@ -187,10 +194,25 @@ export function StoreProvider({ children }) {
     scheduleLeaderboardPush()
   }, [])
 
+  // Recipes
+  const addRecipe = useCallback((recipe) => {
+    storage.addRecipe(recipe)
+    const r = storage.getRecipes()
+    setRecipesState(r)
+    push(uid => saveRecipes(uid, r))
+  }, [])
+
+  const deleteRecipe = useCallback((id) => {
+    storage.deleteRecipe(id)
+    const r = storage.getRecipes()
+    setRecipesState(r)
+    push(uid => saveRecipes(uid, r))
+  }, [])
+
   const resetApp = useCallback(async () => {
     storage.clearAll()
     setProfileState(null); setSessionsState([]); setCheckinsState([])
-    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([])
+    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([]); setRecipesState([])
     if (userRef.current) { await supabase.auth.signOut(); setUser(null); userRef.current = null }
     localStorage.removeItem('ft_auth_skipped')
   }, [])
@@ -209,6 +231,7 @@ export function StoreProvider({ children }) {
       goals, setGoals,
       nutritionLogs, addFoodEntry, removeFoodEntry, addExtraActivity, removeExtraActivity,
       measurementHistory, addMeasurementEntry,
+      recipes, addRecipe, deleteRecipe,
       loaded, resetApp,
       user, syncStatus, signOut,
     }}>

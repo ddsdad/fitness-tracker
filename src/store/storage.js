@@ -5,6 +5,7 @@ const KEYS = {
   GOALS:       'ft_goals',
   NUTRITION:   'ft_nutrition',
   MHISTORY:    'ft_mhistory',
+  RECIPES:     'ft_recipes',
 }
 
 function get(key) {
@@ -97,6 +98,12 @@ export const storage = {
   removeMeasurementEntry: (id) => {
     storage.setMeasurementHistory(storage.getMeasurementHistory().filter(e => e.id !== id))
   },
+
+  // Recipes: [{ id, name, emoji, servings, ingredients[], totals, perServing }]
+  getRecipes: () => get(KEYS.RECIPES) || [],
+  setRecipes: (r) => set(KEYS.RECIPES, r),
+  addRecipe: (recipe) => { const r = storage.getRecipes(); r.unshift(recipe); storage.setRecipes(r) },
+  deleteRecipe: (id) => storage.setRecipes(storage.getRecipes().filter(x => x.id !== id)),
 
   clearAll: () => Object.values(KEYS).forEach(k => localStorage.removeItem(k)),
 }
