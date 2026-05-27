@@ -10,6 +10,7 @@ import { getWeekScheduleData } from '../../utils/recommendations.js'
 import { weeklyReport } from '../../utils/coach.js'
 import Compete from '../Compete/Compete.jsx'
 import Settings from '../Settings/Settings.jsx'
+import Today from '../Today/Today.jsx'
 
 const TIME_WINDOWS = [{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: 'All', days: 365 }]
 
@@ -167,11 +168,11 @@ const LEGEND = [
   { color: 'rgba(239,68,68,0.8)', label: 'Overtrained' },
 ]
 
-export default function Dashboard() {
+export default function Dashboard({ onNavigate, onStartSession }) {
   const { profile, sessions, goals, nutritionLogs } = useStore()
   const [window_, setWindow_] = useState(7)
   const [activeMuscle, setActiveMuscle] = useState(null)
-  const [tab, setTab] = useState('heatmap') // heatmap | schedule | compete | stats
+  const [tab, setTab] = useState('today') // today | heatmap | schedule | compete | stats
   const [showSettings, setShowSettings] = useState(false)
 
   const muscleVolume = getMuscleVolume(sessions, window_)
@@ -234,13 +235,14 @@ export default function Dashboard() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 20, gap: 2 }}>
-        {[['heatmap','Heatmap'],['schedule','Schedule'],['compete','🏆 Compete'],['stats','Stats']].map(([id, label]) => (
+        {[['today','Today'],['heatmap','Heatmap'],['schedule','Schedule'],['compete','🏆'],['stats','Stats']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '7px 4px', borderRadius: 999, border: 'none', cursor: 'pointer', background: tab === id ? 'var(--bg2)' : 'transparent', color: tab === id ? (id === 'compete' ? 'var(--green)' : 'var(--text)') : 'var(--text3)', fontWeight: tab === id ? 600 : 400, fontSize: '0.75rem', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
             {label}
           </button>
         ))}
       </div>
 
+      {tab === 'today'    && <Today embedded onNavigate={onNavigate} onStartSession={onStartSession} />}
       {tab === 'stats'    && <BodyStatsPanel profile={profile} />}
       {tab === 'schedule' && <WeekSchedule sessions={sessions} goals={goals} profile={profile} />}
       {tab === 'compete'  && <Compete />}

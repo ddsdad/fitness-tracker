@@ -76,7 +76,7 @@ function AppInner() {
         </div>
       )}
 
-      {tab === 'dashboard'  && <Dashboard onSignOut={signOut} />}
+      {tab === 'dashboard'  && <Dashboard onSignOut={signOut} onNavigate={setTab} onStartSession={handleStartSession} />}
       {tab === 'workout'    && (
         <WorkoutLog
           onNavigate={setTab}

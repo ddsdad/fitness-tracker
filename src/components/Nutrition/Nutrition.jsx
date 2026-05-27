@@ -6,6 +6,7 @@ import {
   calculateTDEE, calculateMacroTargets, getFoodRecommendations,
   generateMealPlan, sumLogMacros, macroRemaining, EXTRA_ACTIVITIES, activityBurn,
   getMacroCoaching, getSmartPicks, findClosestFoods, detectFoodPatterns, calorieCalibration, DIET_OPTIONS,
+  adaptiveTDEE, effectiveTDEE,
 } from '../../utils/nutrition.js'
 import { IconPlus, IconX, IconCheck, IconFlame } from '../shared/Icons.jsx'
 
@@ -749,7 +750,10 @@ export default function Nutrition() {
   // Derive nutrition goal from caloric mode + physique goal (drives protein g/kg)
   const nutritionGoal = (profile.caloricMode === 'cut' || profile.physiqueGoal === 'lean_athletic') ? 'fat_loss'
     : profile.physiqueGoal === 'stronger_legs' ? 'strength' : 'muscle'
-  const targets = calculateMacroTargets(tdee.total, nutritionGoal, bwKg, profile.caloricMode || 'lean_bulk')
+  // Adaptive TDEE: blend Mifflin estimate with real intake-vs-weight-trend data
+  const adaptive  = useMemo(() => adaptiveTDEE(nutritionLogs, measurementHistory, profile.unit), [nutritionLogs, measurementHistory, profile.unit])
+  const effTDEE   = effectiveTDEE(tdee.total, adaptive)
+  const targets   = calculateMacroTargets(effTDEE.value, nutritionGoal, bwKg, profile.caloricMode || 'lean_bulk')
   const consumed = sumLogMacros(todayLog.meals)
   const remaining = macroRemaining(targets, consumed)
   const calorieLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
@@ -885,6 +889,12 @@ export default function Nutrition() {
                   <div style={{ color: 'var(--text3)', marginTop: 1 }}>{s.label}</div>
                 </div>
               ))}
+            </div>
+            {/* TDEE source */}
+            <div style={{ fontSize: '0.68rem', color: 'var(--text3)', textAlign: 'center', marginTop: 8 }}>
+              {effTDEE.source === 'estimate'
+                ? `Maintenance ≈ ${effTDEE.value} kcal (estimated). Log meals + weigh-ins to calibrate from your real data.`
+                : `🎯 ${effTDEE.source === 'adaptive' ? 'Adaptive' : 'Calibrating'} maintenance: ${effTDEE.value} kcal — from your real intake vs weight trend (${Math.round(effTDEE.confidence*100)}% confidence)`}
             </div>
           </div>
 

@@ -509,6 +509,49 @@ export function detectFoodPatterns(nutritionLogs = {}) {
   return insights
 }
 
+// ─── ADAPTIVE TDEE ────────────────────────────────────────────────────────────
+// The gold standard: your real maintenance = average intake − energy stored/lost
+// as bodyweight, measured over a rolling window. Falls back to null until there's
+// enough logged data (≥5 intake days + ≥2 weigh-ins spanning ≥7 days).
+export function adaptiveTDEE(nutritionLogs = {}, measurementHistory = [], unit = 'kg', windowDays = 14) {
+  const now = Date.now()
+  const intakes = []
+  for (let i = 0; i < windowDays; i++) {
+    const d = new Date(now - i * 86_400_000).toISOString().slice(0, 10)
+    const log = nutritionLogs[d]
+    if (!log) continue
+    const kcal = Object.values(log.meals || {}).flat().reduce((s, e) => s + (e.macros?.kcal || 0), 0)
+    if (kcal > 800) intakes.push(kcal)   // ignore near-empty (unlogged) days
+  }
+  const bw = measurementHistory.filter(r => r.metric === 'bodyweight').sort((a, b) => a.date.localeCompare(b.date))
+  const cutoff = new Date(now - windowDays * 86_400_000).toISOString().slice(0, 10)
+  const recentBw = bw.filter(r => r.date >= cutoff)
+  if (intakes.length < 5 || recentBw.length < 2) return null
+
+  const avgIntake = intakes.reduce((a, b) => a + b, 0) / intakes.length
+  const first = recentBw[0], last = recentBw[recentBw.length - 1]
+  const days = Math.max(1, (new Date(last.date) - new Date(first.date)) / 86_400_000)
+  if (days < 7) return null
+  const kcalPerUnit = unit === 'lbs' ? 3500 : 7700
+  const changePerDay = (last.value - first.value) / days
+  const tdee = Math.round(avgIntake - changePerDay * kcalPerUnit)
+  const confidence = Math.min(1, intakes.length / 14)
+  return {
+    tdee: Math.max(1200, tdee),
+    avgIntake: Math.round(avgIntake),
+    changePerDay: +changePerDay.toFixed(3),
+    daysLogged: intakes.length,
+    confidence: +confidence.toFixed(2),
+  }
+}
+
+// Blend Mifflin estimate with adaptive (weighted by how much data exists)
+export function effectiveTDEE(estimate, adaptive) {
+  if (!adaptive) return { value: estimate, source: 'estimate', confidence: 0 }
+  const c = adaptive.confidence
+  return { value: Math.round(estimate * (1 - c) + adaptive.tdee * c), source: c >= 0.7 ? 'adaptive' : 'blended', confidence: c, adaptive }
+}
+
 // ─── CALORIE AUTO-CALIBRATION ─────────────────────────────────────────────────
 // Compares actual bodyweight trend vs the goal and suggests a kcal adjustment.
 export function calorieCalibration(measurementHistory = [], targets, caloricMode = 'lean_bulk', unit = 'kg') {
