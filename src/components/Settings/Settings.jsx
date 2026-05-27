@@ -11,7 +11,7 @@ const ACTIVITY = [
 
 export default function Settings({ onClose }) {
   const store = useStore()
-  const { profile, setProfile, user, signOut, resetApp,
+  const { profile, setProfile, user, signOut, resetApp, convertAllUnits,
           sessions, checkins, goals, nutritionLogs, measurementHistory, recipes } = store
 
   const [name, setName]       = useState(profile?.name || '')
@@ -22,7 +22,10 @@ export default function Settings({ onClose }) {
   const [saved, setSaved]     = useState(false)
 
   const save = () => {
-    setProfile({ ...profile, name, age: parseInt(age) || profile?.age, gender, unit, activityLevel: activity })
+    const curUnit = profile?.unit || 'kg'
+    // Save non-weight fields keeping the current unit; conversion handles the unit switch
+    setProfile({ ...profile, name, age: parseInt(age) || profile?.age, gender, activityLevel: activity, unit: curUnit })
+    if (unit !== curUnit) convertAllUnits(unit)   // converts every stored weight & length
     setSaved(true); setTimeout(() => setSaved(false), 1500)
   }
 

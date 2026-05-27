@@ -7,6 +7,7 @@ import {
   saveProfile, saveSession, removeSession,
   saveCheckin, saveGoals, saveNutritionLog,
   saveMeasurementEntries, upsertLeaderboardStats, saveRecipes,
+  saveCustomExercises, saveRoutines,
 } from '../lib/db.js'
 import { computeLeaderboardStats } from '../utils/leaderboard.js'
 
@@ -70,7 +71,13 @@ export function StoreProvider({ children }) {
       const hasRemote = remote.profile || remote.sessions.length > 0
 
       if (hasRemote) {
-        if (remote.profile)  { storage.setProfile(remote.profile);   setProfileState(remote.profile) }
+        if (remote.profile)  {
+          const localP = storage.getProfile()
+          const useRemote = !localP?._ts || (remote.profile._ts || 0) >= localP._ts
+          const chosen = useRemote ? remote.profile : localP
+          storage.setProfile(chosen); setProfileState(chosen)
+          if (!useRemote) saveProfile(userId, chosen).catch(() => {})
+        }
         if (remote.sessions.length)  { storage.setSessions(remote.sessions); setSessionsState(remote.sessions) }
         if (remote.checkins.length)  { storage.setCheckins(remote.checkins); setCheckinsState(remote.checkins) }
         if (Object.keys(remote.goals).length) { storage.setGoals(remote.goals); setGoalsState(remote.goals) }
@@ -86,6 +93,14 @@ export function StoreProvider({ children }) {
           storage.setRecipes(remote.recipes)
           setRecipesState(remote.recipes)
         }
+        if (remote.customExercises?.length) {
+          storage.setCustomExercises(remote.customExercises)
+          setCustomExercisesState(remote.customExercises)
+        }
+        if (remote.routines?.length) {
+          storage.setRoutines(remote.routines)
+          setRoutinesState(remote.routines)
+        }
       } else {
         await uploadLocalData(userId, {
           profile:            storage.getProfile()            || {},
@@ -95,6 +110,8 @@ export function StoreProvider({ children }) {
           nutritionLogs:      storage.getNutritionLogs()      || {},
           measurementHistory: storage.getMeasurementHistory() || [],
           recipes:            storage.getRecipes()            || [],
+          customExercises:    storage.getCustomExercises()    || [],
+          routines:           storage.getRoutines()           || [],
         })
       }
       setSyncStatus('synced')
@@ -128,8 +145,9 @@ export function StoreProvider({ children }) {
 
   // ── 6. Store actions ───────────────────────────────────────────────────────
   const setProfile = useCallback((p) => {
-    storage.setProfile(p); setProfileState(p)
-    push(uid => saveProfile(uid, p))
+    const stamped = { ...p, _ts: Date.now() }   // for last-writer conflict resolution
+    storage.setProfile(stamped); setProfileState(stamped)
+    push(uid => saveProfile(uid, stamped))
     scheduleLeaderboardPush()
   }, [])
 
@@ -215,11 +233,52 @@ export function StoreProvider({ children }) {
 
   const addCustomExercise = useCallback((ex) => {
     storage.addCustomExercise(ex)
-    setCustomExercisesState(storage.getCustomExercises())
+    const c = storage.getCustomExercises()
+    setCustomExercisesState(c)
+    push(uid => saveCustomExercises(uid, c))
   }, [])
 
-  const addRoutine = useCallback((r) => { storage.addRoutine(r); setRoutinesState(storage.getRoutines()) }, [])
-  const deleteRoutine = useCallback((id) => { storage.deleteRoutine(id); setRoutinesState(storage.getRoutines()) }, [])
+  const addRoutine = useCallback((r) => { storage.addRoutine(r); const a = storage.getRoutines(); setRoutinesState(a); push(uid => saveRoutines(uid, a)) }, [])
+  const deleteRoutine = useCallback((id) => { storage.deleteRoutine(id); const a = storage.getRoutines(); setRoutinesState(a); push(uid => saveRoutines(uid, a)) }, [])
+
+  // Convert ALL stored weights/lengths when the user switches kg↔lbs
+  const convertAllUnits = useCallback((toUnit) => {
+    const p = storage.getProfile()
+    if (!p || (p.unit || 'kg') === toUnit) return
+    const wf = toUnit === 'lbs' ? 2.2046 : 1 / 2.2046   // weight factor
+    const lf = toUnit === 'lbs' ? 1 / 2.54 : 2.54        // length factor (cm↔in)
+    const cw = v => (v ? +(v * wf).toFixed(1) : v)
+    const cl = v => (v ? +(v * lf).toFixed(1) : v)
+    const mapO = (o, fn) => (o ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, fn(v)])) : o)
+
+    const np = { ...p, unit: toUnit,
+      bodyweight: cw(p.bodyweight), height: cl(p.height), wrist: cl(p.wrist), ankle: cl(p.ankle), neck: cl(p.neck),
+      measurements: mapO(p.measurements, cl), liftMaxes: mapO(p.liftMaxes, cw),
+      milestones: (p.milestones || []).map(m => ({ ...m, bodyweight: cw(m.bodyweight), measurements: mapO(m.measurements, cl), liftMaxes: mapO(m.liftMaxes, cw) })),
+    }
+    storage.setProfile(np); setProfileState(np)
+
+    const sess = storage.getSessions().map(s => ({ ...s, totalVolume: cw(s.totalVolume),
+      exercises: (s.exercises || []).map(ex => ({ ...ex, bestE1RM: cw(ex.bestE1RM),
+        sets: (ex.sets || []).map(st => ({ ...st, weight: cw(st.weight) })) })) }))
+    storage.setSessions(sess); setSessionsState(sess)
+
+    const cks = storage.getCheckins().map(c => ({ ...c, bodyweight: cw(c.bodyweight), measurements: mapO(c.measurements, cl), liftMaxes: mapO(c.liftMaxes, cw) }))
+    storage.setCheckins(cks); setCheckinsState(cks)
+
+    const WMETRICS = new Set(['bodyweight', 'bench', 'squat', 'deadlift', 'row', 'ohp'])
+    const mh = storage.getMeasurementHistory().map(r => ({ ...r, value: WMETRICS.has(r.metric) ? cw(r.value) : cl(r.value), unit: toUnit }))
+    storage.setMeasurementHistory(mh); setMeasurementHistoryState(mh)
+
+    if (userRef.current) {
+      const uid = userRef.current.id
+      saveProfile(uid, np).catch(() => {})
+      sess.forEach(s => saveSession(uid, s).catch(() => {}))
+      cks.forEach(c => saveCheckin(uid, c).catch(() => {}))
+      if (mh.length) saveMeasurementEntries(uid, mh).catch(() => {})
+    }
+    scheduleLeaderboardPush()
+  }, [])
 
   const resetApp = useCallback(async () => {
     storage.clearAll()
@@ -246,6 +305,7 @@ export function StoreProvider({ children }) {
       recipes, addRecipe, deleteRecipe,
       customExercises, addCustomExercise,
       routines, addRoutine, deleteRoutine,
+      convertAllUnits,
       loaded, resetApp,
       user, syncStatus, signOut,
     }}>

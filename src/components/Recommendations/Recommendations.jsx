@@ -8,6 +8,7 @@ import { getRegion, getEmphasis, weeklyDelta, groupedAlternatives, represcribe, 
 import { getMuscleVolume } from '../../utils/heatmap.js'
 import { detectTrainingLevel } from '../../utils/milestones.js'
 import Program from '../Program/Program.jsx'
+import { getProgramStatus } from '../../utils/program.js'
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 function Badge({ children, color = 'var(--green)' }) {
@@ -720,7 +721,10 @@ export default function Recommendations({ onStartSession }) {
   const customWeights = Object.keys(goals).length > 0 ? goals : null
   const { workoutPlans, topMuscles, message, insights, muscleScores } =
     getRecommendations(sessions, profile, customWeights, sessionTypeId)
-  const deloadAlerts = detectDeloadNeed(sessions)
+  // Suppress auto-deload alerts when the active program already schedules a deload this week
+  const _progStatus = profile.program ? getProgramStatus(profile.program) : null
+  const programDeload = !!_progStatus && !_progStatus.notStarted && !_progStatus.finished && _progStatus.weekPlan?.deload
+  const deloadAlerts = programDeload ? [] : detectDeloadNeed(sessions)
 
   const sessionType = SESSION_TYPES[sessionTypeId]
 

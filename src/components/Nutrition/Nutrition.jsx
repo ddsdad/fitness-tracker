@@ -746,7 +746,10 @@ export default function Nutrition() {
   const extraActivities = todayLog.extraActivities || []
 
   const tdee    = calculateTDEE(profile, todaySessions, extraActivities)
-  const targets = calculateMacroTargets(tdee.total, profile.goal || 'muscle', bwKg, profile.caloricMode || 'lean_bulk')
+  // Derive nutrition goal from caloric mode + physique goal (drives protein g/kg)
+  const nutritionGoal = (profile.caloricMode === 'cut' || profile.physiqueGoal === 'lean_athletic') ? 'fat_loss'
+    : profile.physiqueGoal === 'stronger_legs' ? 'strength' : 'muscle'
+  const targets = calculateMacroTargets(tdee.total, nutritionGoal, bwKg, profile.caloricMode || 'lean_bulk')
   const consumed = sumLogMacros(todayLog.meals)
   const remaining = macroRemaining(targets, consumed)
   const calorieLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })

@@ -109,10 +109,12 @@ export const storage = {
 
   // Custom exercises: [{ id, name, primary, secondary, category, equipment, custom:true }]
   getCustomExercises: () => get(KEYS.CUSTOM_EX) || [],
+  setCustomExercises: (c) => set(KEYS.CUSTOM_EX, c),
   addCustomExercise: (ex) => { const c = storage.getCustomExercises(); c.push(ex); set(KEYS.CUSTOM_EX, c) },
 
   // Routines: [{ id, name, emoji, exercises:[{exerciseId,name,primary,secondary,category,equipment,sets,reps}] }]
   getRoutines: () => get(KEYS.ROUTINES) || [],
+  setRoutines: (a) => set(KEYS.ROUTINES, a),
   addRoutine: (r) => { const a = storage.getRoutines(); a.unshift(r); set(KEYS.ROUTINES, a) },
   deleteRoutine: (id) => set(KEYS.ROUTINES, storage.getRoutines().filter(x => x.id !== id)),
 
