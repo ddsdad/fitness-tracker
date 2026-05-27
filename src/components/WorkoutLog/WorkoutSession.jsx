@@ -46,6 +46,28 @@ function getLastPerf(exerciseId, sessions) {
   return null
 }
 
+// ── Plate calculator (per side, 20 kg Olympic bar) ────────────────────────────
+const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 1.25]
+function platesPerSide(target, bar = 20) {
+  let perSide = (target - bar) / 2
+  if (perSide <= 0) return []
+  const out = []
+  for (const p of PLATES_KG) {
+    while (perSide >= p - 1e-9) { out.push(p); perSide = +(perSide - p).toFixed(3) }
+  }
+  return out
+}
+
+// ── Warm-up ramp from a top working weight ────────────────────────────────────
+function warmupRamp(topWeight, bar = 20) {
+  if (!topWeight || topWeight <= bar) return []
+  return [
+    { pct: 0.40, reps: 8 },
+    { pct: 0.60, reps: 5 },
+    { pct: 0.80, reps: 3 },
+  ].map(w => ({ weight: Math.max(bar, Math.round(topWeight * w.pct / 2.5) * 2.5), reps: w.reps }))
+}
+
 // ── Progressive overload suggestion ──────────────────────────────────────────
 function progressionSuggestion(lastSets) {
   if (!lastSets?.length) return null
@@ -97,14 +119,17 @@ function RestTimer({ seconds, onDone }) {
 
   const mins = Math.floor(remaining / 60)
   const secs = remaining % 60
+  const low  = remaining <= 10
 
   return (
-    <div style={{ background: 'var(--bg3)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+    <div style={{ background: low ? 'rgba(34,197,94,0.12)' : 'var(--bg3)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, transition: 'background 0.2s' }}>
       <IconTimer />
-      <span style={{ fontWeight: 700, fontSize: '1.25rem', fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ fontWeight: 700, fontSize: '1.25rem', fontVariantNumeric: 'tabular-nums', color: low ? 'var(--green)' : 'var(--text)' }}>
         {mins}:{String(secs).padStart(2, '0')}
       </span>
-      <span style={{ color: 'var(--text3)', fontSize: '0.875rem', flex: 1 }}>Rest timer</span>
+      <button onClick={() => setRemaining(r => Math.max(0, r - 15))} style={{ background: 'var(--bg4)', border: 'none', borderRadius: 6, padding: '4px 8px', color: 'var(--text2)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}>−15</button>
+      <button onClick={() => setRemaining(r => r + 15)} style={{ background: 'var(--bg4)', border: 'none', borderRadius: 6, padding: '4px 8px', color: 'var(--text2)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}>+15</button>
+      <span style={{ flex: 1 }} />
       <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.8125rem' }} onClick={() => setRunning(r => !r)}>
         {running ? 'Pause' : 'Resume'}
       </button>
@@ -150,10 +175,12 @@ function ExercisePicker({ onSelect, onClose }) {
 }
 
 // ── Set row ───────────────────────────────────────────────────────────────────
-function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight }) {
+function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, showPlates }) {
+  const plates = showPlates && set.weight > 0 ? platesPerSide(set.weight) : null
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-      <span style={{ color: 'var(--text3)', fontSize: '0.8125rem', textAlign: 'center' }}>{idx + 1}</span>
+    <>
+    <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', marginBottom: plates ? 2 : 8 }}>
+      <span style={{ color: set.warmup ? 'var(--yellow)' : 'var(--text3)', fontSize: '0.8125rem', textAlign: 'center', fontWeight: set.warmup ? 700 : 400 }}>{set.warmup ? 'W' : idx + 1}</span>
 
       {/* Weight */}
       <div className="input-unit" style={{ position: 'relative' }}>
@@ -196,6 +223,12 @@ function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight }
         <IconCheck />
       </button>
     </div>
+    {plates && (
+      <div style={{ gridColumn: '2 / 5', fontSize: '0.7rem', color: 'var(--text3)', marginBottom: 8, paddingLeft: 4 }}>
+        🏋️ Per side: {plates.length ? plates.map(p => `${p}`).join(' + ') + ' kg' : 'just the bar (20kg)'}
+      </div>
+    )}
+    </>
   )
 }
 
@@ -203,10 +236,31 @@ function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight }
 function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, isView }) {
   const [showTimer, setShowTimer] = useState(false)
   const [timerSecs, setTimerSecs] = useState(90)
+  const [showPlates, setShowPlates] = useState(false)
 
   const ex = EXERCISES.find(e => e.id === exercise.exerciseId)
   const suggestion = progressionSuggestion(lastPerf?.sets)
   const currentBest = bestE1RM(exercise.sets)
+
+  // Fill all working sets with last session's weight & reps (one tap)
+  const fillFromLast = () => {
+    const done = (lastPerf?.sets || []).filter(s => s.weight > 0 && s.reps > 0)
+    if (!done.length) return
+    const w = suggestion?.suggestedWeight || done[done.length - 1].weight
+    const r = done[done.length - 1].reps
+    onUpdate({ ...exercise, sets: exercise.sets.map(s => s.warmup ? s : { ...s, weight: w, reps: r }) })
+  }
+
+  // Prepend warm-up sets based on the heaviest working weight entered (or suggestion)
+  const addWarmup = () => {
+    const topW = Math.max(...exercise.sets.map(s => s.weight || 0), suggestion?.suggestedWeight || 0)
+    const ramp = warmupRamp(topW)
+    if (!ramp.length) return
+    const warm = ramp.map(w => ({ id: genId(), weight: w.weight, reps: w.reps, restSeconds: 60, done: false, warmup: true }))
+    const working = exercise.sets.filter(s => !s.warmup)
+    onUpdate({ ...exercise, sets: [...warm, ...working] })
+  }
+  const hasWarmup = exercise.sets.some(s => s.warmup)
 
   // Format last-perf summary
   const lastPerfSummary = lastPerf?.sets
@@ -262,6 +316,25 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
         </div>
       )}
 
+      {/* Quick tools */}
+      {!isView && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+          {lastPerf?.sets?.some(s => s.weight > 0) && (
+            <button onClick={fillFromLast} style={{ fontSize: '0.7rem', padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: 'pointer' }}>
+              ↻ Fill from last
+            </button>
+          )}
+          {!hasWarmup && (
+            <button onClick={addWarmup} style={{ fontSize: '0.7rem', padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: 'pointer' }}>
+              🔥 Warm-up sets
+            </button>
+          )}
+          <button onClick={() => setShowPlates(p => !p)} style={{ fontSize: '0.7rem', padding: '4px 10px', borderRadius: 999, border: `1px solid ${showPlates ? 'var(--green)' : 'var(--border)'}`, background: showPlates ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: showPlates ? 'var(--green)' : 'var(--text2)', cursor: 'pointer' }}>
+            🏋️ Plates
+          </button>
+        </div>
+      )}
+
       {/* Live 1RM */}
       {currentBest > 0 && (
         <div style={{ marginBottom: 8, fontSize: '0.75rem', color: 'var(--yellow)', fontWeight: 600 }}>
@@ -293,6 +366,7 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
           onDelete={() => deleteSet(set.id)}
           onSetComplete={handleSetComplete}
           suggestedWeight={!lastPerfSummary && suggestion ? suggestion.suggestedWeight : suggestion?.lastWeight}
+          showPlates={showPlates}
         />
       ))}
 
