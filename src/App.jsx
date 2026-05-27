@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from './store/useStore.js'
+import { THEMES } from './utils/gamification.js'
 import { StoreProvider } from './store/StoreProvider.jsx'
 import Onboarding from './components/Onboarding/Onboarding.jsx'
 import Dashboard from './components/Dashboard/Dashboard.jsx'
@@ -26,6 +27,14 @@ function AppInner() {
     localStorage.setItem('ft_auth_skipped', '1')
     setSkippedAuth(true)
   }
+
+  // Apply the unlocked accent theme app-wide (re-skins via CSS vars)
+  useEffect(() => {
+    const t = THEMES[profile?.game?.theme] || THEMES.green
+    document.documentElement.style.setProperty('--green', t.color)
+    document.documentElement.style.setProperty('--green-dim', t.dim)
+    document.documentElement.style.setProperty('--accent', t.color)
+  }, [profile?.game?.theme])
 
   // Loading spinner
   if (!loaded) {

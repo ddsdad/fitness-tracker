@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore.js'
 import { fetchLeaderboard, createLeague, joinLeague, leaveLeague, getMyLeagues, getLeagueMemberIds } from '../../lib/db.js'
 import { LEADERBOARD_CATEGORIES, getClimbHint, getRankEmoji } from '../../utils/leaderboard.js'
 import { computeAchievements, achievementSummary } from '../../utils/achievements.js'
+import { gameStats, SHOP, THEMES } from '../../utils/gamification.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function since(ts) {
@@ -187,6 +188,54 @@ function LeagueModal({ userId, onClose, onChanged }) {
   )
 }
 
+// ── Shop view ─────────────────────────────────────────────────────────────────
+function ShopView() {
+  const { profile, sessions, measurementHistory, nutritionLogs, buyShopItem, equipTheme } = useStore()
+  const [toast, setToast] = useState(null)
+  const stats = gameStats(profile, sessions, measurementHistory, nutritionLogs)
+  const owned = profile?.game?.owned || []
+  const activeTheme = profile?.game?.theme || 'green'
+
+  const buy = (item) => { const r = buyShopItem(item); setToast(r.message); setTimeout(() => setToast(null), 2500) }
+
+  return (
+    <div>
+      {/* Balance */}
+      <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(34,197,94,0.12), var(--bg2))' }}>
+        <div><div style={{ fontSize: '0.7rem', color: 'var(--text3)', textTransform: 'uppercase' }}>Balance</div><div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--green)' }}>🪙 {stats.coins}</div></div>
+        <div style={{ textAlign: 'right' }}><div style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>{stats.title.emoji} Level {stats.level}</div><div style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>{stats.title.title}</div></div>
+      </div>
+
+      {toast && <div style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid var(--green)', borderRadius: 10, padding: '10px 14px', marginBottom: 12, color: 'var(--green)', fontSize: '0.85rem', fontWeight: 600, textAlign: 'center' }}>{toast}</div>}
+
+      {SHOP.map(item => {
+        const isOwned = !item.repeatable && owned.includes(item.id)
+        const isEquipped = item.kind === 'theme' && activeTheme === item.themeId
+        const afford = stats.coins >= item.price
+        return (
+          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', marginBottom: 8, border: `1px solid ${isEquipped ? 'var(--green)' : 'var(--border)'}`, borderRadius: 12, background: 'var(--bg2)' }}>
+            <span style={{ fontSize: '1.5rem' }}>{item.emoji}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{item.name}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>{item.desc || (item.kind === 'theme' ? 'Re-skins the whole app' : '')}</div>
+            </div>
+            {isOwned && item.kind === 'theme' ? (
+              isEquipped
+                ? <span style={{ fontSize: '0.72rem', color: 'var(--green)', fontWeight: 700 }}>Equipped</span>
+                : <button onClick={() => equipTheme(item.themeId)} style={{ padding: '6px 12px', borderRadius: 999, border: '1px solid var(--green)', background: 'transparent', color: 'var(--green)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Equip</button>
+            ) : isOwned ? (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text3)' }}>Owned</span>
+            ) : (
+              <button onClick={() => afford && buy(item)} disabled={!afford} style={{ padding: '6px 12px', borderRadius: 999, border: 'none', background: afford ? 'var(--green)' : 'var(--bg4)', color: afford ? '#000' : 'var(--text3)', fontSize: '0.72rem', fontWeight: 700, cursor: afford ? 'pointer' : 'default', flexShrink: 0 }}>🪙 {item.price}</button>
+            )}
+          </div>
+        )
+      })}
+      <p style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text3)', marginTop: 12 }}>Earn coins by training, hitting PRs, logging nutrition & completing quests.</p>
+    </div>
+  )
+}
+
 // ── Main Compete view ─────────────────────────────────────────────────────────
 export default function Compete() {
   const { user, profile }    = useStore()
@@ -261,7 +310,7 @@ export default function Compete() {
     <div>
       {/* View toggle */}
       <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 16, gap: 2 }}>
-        {[['leaderboard', '🏆 Leaderboard'], ['achievements', '🎖️ Achievements']].map(([id, label]) => (
+        {[['leaderboard', '🏆'], ['achievements', '🎖️'], ['shop', '🛒 Shop']].map(([id, label]) => (
           <button key={id} onClick={() => setView(id)} style={{ flex: 1, padding: '8px', borderRadius: 999, border: 'none', cursor: 'pointer', background: view === id ? 'var(--bg2)' : 'transparent', color: view === id ? 'var(--green)' : 'var(--text3)', fontWeight: view === id ? 700 : 400, fontSize: '0.8125rem' }}>
             {label}
           </button>
@@ -269,6 +318,7 @@ export default function Compete() {
       </div>
 
       {view === 'achievements' && <AchievementsView />}
+      {view === 'shop' && <ShopView />}
 
       {view === 'leaderboard' && <>
       {showLeagueModal && <LeagueModal userId={user.id} onClose={() => setShowLeagueModal(false)} onChanged={loadLeagues} />}

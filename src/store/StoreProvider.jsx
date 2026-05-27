@@ -10,6 +10,7 @@ import {
   saveCustomExercises, saveRoutines,
 } from '../lib/db.js'
 import { computeLeaderboardStats } from '../utils/leaderboard.js'
+import { gameStats, buildCookbookRecipes, openMysteryBox, THEMES } from '../utils/gamification.js'
 
 export function StoreProvider({ children }) {
   const [profile,            setProfileState]         = useState(null)
@@ -244,6 +245,48 @@ export function StoreProvider({ children }) {
   const addRoutine = useCallback((r) => { storage.addRoutine(r); const a = storage.getRoutines(); setRoutinesState(a); push(uid => saveRoutines(uid, a)) }, [])
   const deleteRoutine = useCallback((id) => { storage.deleteRoutine(id); const a = storage.getRoutines(); setRoutinesState(a); push(uid => saveRoutines(uid, a)) }, [])
 
+  // ── Gamification actions (mutate profile.game) ─────────────────────────────
+  const completeQuest = useCallback((dateStr, quest) => {
+    const p = storage.getProfile(); if (!p) return
+    const game = { ...(p.game || {}) }
+    const log = { ...(game.questLog || {}) }
+    const done = log[dateStr] || []
+    if (done.includes(quest.id)) return
+    log[dateStr] = [...done, quest.id]
+    game.questLog = log
+    game.questCoins = (game.questCoins || 0) + quest.reward
+    setProfile({ ...p, game })
+  }, [setProfile])
+
+  const equipTheme = useCallback((themeId) => {
+    const p = storage.getProfile(); if (!p) return
+    const game = p.game || {}
+    if (themeId !== 'green' && !(game.owned || []).some(id => id === `theme_${themeId}`)) return
+    setProfile({ ...p, game: { ...game, theme: themeId } })
+  }, [setProfile])
+
+  const buyShopItem = useCallback((item) => {
+    const p = storage.getProfile(); if (!p) return { ok: false, message: 'No profile' }
+    const stats = gameStats(p, storage.getSessions(), storage.getMeasurementHistory(), storage.getNutritionLogs())
+    const owned = p.game?.owned || []
+    if (!item.repeatable && owned.includes(item.id)) return { ok: false, message: 'Already owned' }
+    if (stats.coins < item.price) return { ok: false, message: `Need ${item.price - stats.coins} more coins` }
+    const game = { ...(p.game || {}) }
+    game.spent = (game.spent || 0) + item.price
+    let message = `Purchased ${item.name}`
+    if (item.kind === 'theme')      { game.owned = [...owned, item.id]; game.theme = item.themeId; message = `${THEMES[item.themeId].name} unlocked & equipped!` }
+    else if (item.kind === 'title') { game.owned = [...owned, item.id]; game.title = item.title; message = `Title "${item.title}" equipped!` }
+    else if (item.kind === 'mystery') { const box = openMysteryBox(); game.questCoins = (game.questCoins || 0) + box.amount; message = `🎁 ${box.label === 'JACKPOT 🎉' ? box.label + ' ' : 'You won '}${box.amount} coins!` }
+    else if (item.kind === 'cookbook') {
+      const recs = buildCookbookRecipes(item.pack)
+      recs.forEach(r => storage.addRecipe(r))
+      const all = storage.getRecipes(); setRecipesState(all); push(uid => saveRecipes(uid, all))
+      game.owned = [...owned, item.id]; message = `${recs.length} recipes added to your cookbook!`
+    }
+    setProfile({ ...p, game })
+    return { ok: true, message }
+  }, [setProfile])
+
   // Convert ALL stored weights/lengths when the user switches kg↔lbs
   const convertAllUnits = useCallback((toUnit) => {
     const p = storage.getProfile()
@@ -309,6 +352,7 @@ export function StoreProvider({ children }) {
       customExercises, addCustomExercise,
       routines, addRoutine, deleteRoutine,
       convertAllUnits,
+      completeQuest, equipTheme, buyShopItem,
       loaded, resetApp,
       user, syncStatus, signOut,
     }}>

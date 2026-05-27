@@ -58,7 +58,8 @@ export function postSessionFeedback(session, priorSessions, profile) {
     lines.push(`Heads up: ${MUSCLE_GROUPS[top.m]?.label} is under its weekly minimum (${top.v.toFixed(0)}/${top.mev} sets) — prioritize it next session.`)
   }
 
-  return { headline, tone, lines, prs }
+  const coins = 10 + Math.min(40, workingSets * 2) + prs.length * 25
+  return { headline, tone, lines, prs, coins }
 }
 
 // ── Weekly report ─────────────────────────────────────────────────────────────

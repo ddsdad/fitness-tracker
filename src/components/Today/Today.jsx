@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore.js'
 import { getProgramStatus, SPLIT_META, splitVariant, generateProgramWorkout } from '../../utils/program.js'
 import { calculateTDEE, calculateMacroTargets, sumLogMacros, adaptiveTDEE, effectiveTDEE } from '../../utils/nutrition.js'
 import { computePRs } from '../../utils/analytics.js'
+import { gameStats, dailyQuests } from '../../utils/gamification.js'
 import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
 
 const TODAY = new Date().toISOString().slice(0, 10)
@@ -34,7 +35,7 @@ function Ring({ pct, color, size = 64, children }) {
 }
 
 export default function Today({ onNavigate, onStartSession, embedded = false }) {
-  const { profile, sessions, nutritionLogs, measurementHistory } = useStore()
+  const { profile, sessions, nutritionLogs, measurementHistory, completeQuest } = useStore()
 
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening' })()
   const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -68,8 +69,53 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
   // weigh-in today?
   const weighedToday = measurementHistory.some(r => r.metric === 'bodyweight' && r.date === TODAY)
 
+  // ── Gamification ──
+  const game = useMemo(() => gameStats(profile, sessions, measurementHistory, nutritionLogs), [profile, sessions, measurementHistory, nutritionLogs])
+  const quests = dailyQuests(TODAY, readiness?.score)
+  const questDone = profile?.game?.questLog?.[TODAY] || []
+
   const body = (
     <>
+      {/* ── Level / coins banner ── */}
+      <div className="card" style={{ marginBottom: 16, background: 'linear-gradient(135deg, rgba(34,197,94,0.12), var(--bg2))' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 46, height: 46, borderRadius: 12, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>{game.title.emoji}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontWeight: 700 }}>Level {game.level} · {game.title.title}</span>
+              <span style={{ fontWeight: 800, color: 'var(--green)' }}>🪙 {game.coins}</span>
+            </div>
+            <div style={{ height: 5, background: 'var(--bg4)', borderRadius: 3, overflow: 'hidden', marginTop: 6 }}>
+              <div style={{ height: '100%', width: `${game.levelProgress * 100}%`, background: 'var(--green)', borderRadius: 3, transition: 'width 0.5s' }} />
+            </div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text3)', marginTop: 3 }}>{game.xpIntoLevel}/{game.xpForNext} XP to level {game.level + 1}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Daily quests ── */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Daily Quests</span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>{questDone.length}/{quests.length} done · resets at midnight</span>
+        </div>
+        {quests.map(q => {
+          const done = questDone.includes(q.id)
+          return (
+            <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--bg3)', opacity: done ? 0.55 : 1 }}>
+              <span style={{ fontSize: '1.1rem' }}>{q.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 600, textDecoration: done ? 'line-through' : 'none' }}>{q.text}</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--green)' }}>+{q.reward} 🪙</div>
+              </div>
+              {done
+                ? <span style={{ color: 'var(--green)', fontWeight: 700 }}>✓</span>
+                : <button onClick={() => completeQuest(TODAY, q)} style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 999, border: 'none', background: 'var(--green)', color: '#000', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Claim</button>}
+            </div>
+          )
+        })}
+      </div>
+
       {/* ── Today's training ── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Today's Training</div>

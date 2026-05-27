@@ -601,6 +601,11 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
       <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg)', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
         <div style={{ fontSize: 56, marginBottom: 12 }}>{feedback.prs.length ? '🏆' : '💪'}</div>
         <h2 style={{ marginBottom: 8 }}>{feedback.headline}</h2>
+        {feedback.coins > 0 && (
+          <div style={{ display: 'inline-block', background: 'rgba(34,197,94,0.12)', border: '1px solid var(--green)', borderRadius: 999, padding: '6px 16px', marginBottom: 16, fontWeight: 800, color: 'var(--green)' }}>
+            +{feedback.coins} 🪙 earned
+          </div>
+        )}
         <div style={{ maxWidth: 360, marginBottom: 24 }}>
           {feedback.lines.map((l, i) => (
             <p key={i} style={{ color: 'var(--text2)', fontSize: '0.9rem', lineHeight: 1.6, marginTop: 6 }}>{l}</p>
