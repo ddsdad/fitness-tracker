@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback } from 'react'
+import { v4 as uuid } from 'uuid'
 import { useStore } from '../../store/useStore.js'
 import { FOODS, FOOD_CATEGORIES, searchFoods, getFoodMacros, proteinQualityLabel, nutrientChips } from '../../data/foods.js'
 import {
   calculateTDEE, calculateMacroTargets, getFoodRecommendations,
   generateMealPlan, sumLogMacros, macroRemaining, EXTRA_ACTIVITIES, activityBurn,
-  getMacroCoaching,
+  getMacroCoaching, getSmartPicks, findClosestFoods, detectFoodPatterns, calorieCalibration, DIET_OPTIONS,
 } from '../../utils/nutrition.js'
 import { IconPlus, IconX, IconCheck, IconFlame } from '../shared/Icons.jsx'
 
@@ -453,35 +454,85 @@ function MealSection({ meal, entries, onAdd, onRemove }) {
   )
 }
 
-// ─── Recommendations Panel ────────────────────────────────────────────────────
-function RecommendPanel({ remaining, onAdd }) {
-  const recs = useMemo(() => getFoodRecommendations(remaining, 5), [remaining.kcal, remaining.protein])
-  if (!recs.length || remaining.kcal < 50) return null
-  const urgentNutrient = remaining.protein > 20 ? `${remaining.protein.toFixed(0)}g protein` : remaining.carbs > 30 ? `${remaining.carbs.toFixed(0)}g carbs` : null
+// ─── Food row used by picks & finder ──────────────────────────────────────────
+function PickRow({ food, grams, macros, meta, onAdd }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg3)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+      <span style={{ fontSize: '1.3rem' }}>{food.emoji}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{food.name}</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>
+          {grams}g · {macros.kcal} kcal · <span style={{ color: 'var(--green)' }}>P:{macros.protein}g</span> · C:{macros.carbs}g · F:{macros.fat}g{meta ? ` · ${meta}` : ''}
+        </div>
+      </div>
+      <button onClick={() => onAdd({ id: genId(), foodId: food.id, name: food.name, brand: food.brand, grams, macros })}
+        style={{ background: 'var(--green)', border: 'none', borderRadius: 999, color: '#000', fontSize: '0.75rem', fontWeight: 700, padding: '5px 12px', cursor: 'pointer', flexShrink: 0 }}>+ Add</button>
+    </div>
+  )
+}
+
+// ─── Recommendations Panel (smart picks + diet prefs + macro finder) ──────────
+function RecommendPanel({ remaining, onAdd, recentCounts }) {
+  const { profile, setProfile } = useStore()
+  const prefs = profile?.dietPrefs || { diet: 'none', clean: false, avoidFastFood: false }
+  const setPref = (patch) => setProfile({ ...profile, dietPrefs: { ...prefs, ...patch } })
+
+  const [mode, setMode] = useState('picks') // 'picks' | 'finder'
+  const [mp, setMp] = useState(40), [mc, setMc] = useState(40), [mf, setMf] = useState(15)
+
+  const picks = useMemo(() => getSmartPicks(remaining, prefs, recentCounts, 6), [remaining.kcal, remaining.protein, JSON.stringify(prefs), JSON.stringify(recentCounts)])
+  const finds = useMemo(() => findClosestFoods({ protein: mp, carbs: mc, fat: mf }, prefs, 6), [mp, mc, mf, JSON.stringify(prefs)])
+
   return (
     <div style={{ marginTop: 4, marginBottom: 16 }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>💡 Smart Picks</div>
-      <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginBottom: 10 }}>
-        {remaining.kcal} kcal left{urgentNutrient ? ` · still need ${urgentNutrient}` : ''}
+      {/* Diet preference chips */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {DIET_OPTIONS.map(d => (
+          <button key={d.id} onClick={() => setPref({ diet: d.id })} style={{ fontSize: '0.68rem', padding: '4px 10px', borderRadius: 999, border: `1px solid ${prefs.diet === d.id ? 'var(--green)' : 'var(--border)'}`, background: prefs.diet === d.id ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: prefs.diet === d.id ? 'var(--green)' : 'var(--text2)', cursor: 'pointer' }}>{d.label}</button>
+        ))}
+        <button onClick={() => setPref({ clean: !prefs.clean })} style={{ fontSize: '0.68rem', padding: '4px 10px', borderRadius: 999, border: `1px solid ${prefs.clean ? 'var(--green)' : 'var(--border)'}`, background: prefs.clean ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: prefs.clean ? 'var(--green)' : 'var(--text2)', cursor: 'pointer' }}>🥗 Eat clean</button>
+        <button onClick={() => setPref({ avoidFastFood: !prefs.avoidFastFood })} style={{ fontSize: '0.68rem', padding: '4px 10px', borderRadius: 999, border: `1px solid ${prefs.avoidFastFood ? 'var(--green)' : 'var(--border)'}`, background: prefs.avoidFastFood ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: prefs.avoidFastFood ? 'var(--green)' : 'var(--text2)', cursor: 'pointer' }}>🚫🍔</button>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {recs.map(({ food, grams, macros }) => (
-          <div key={food.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg3)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-            <span style={{ fontSize: '1.3rem' }}>{food.emoji}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{food.name}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>
-                {grams}g · {macros.kcal} kcal · <span style={{ color: 'var(--green)' }}>P:{macros.protein}g</span> · C:{macros.carbs}g · F:{macros.fat}g
-              </div>
-            </div>
-            <button
-              onClick={() => onAdd({ id: genId(), foodId: food.id, name: food.name, brand: food.brand, grams, macros })}
-              style={{ background: 'var(--green)', border: 'none', borderRadius: 999, color: '#000', fontSize: '0.75rem', fontWeight: 700, padding: '5px 12px', cursor: 'pointer', flexShrink: 0 }}>
-              + Add
-            </button>
-          </div>
+
+      {/* Mode toggle */}
+      <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 12 }}>
+        {[['picks','💡 Smart Picks'],['finder','🎯 Macro Finder']].map(([id,l]) => (
+          <button key={id} onClick={() => setMode(id)} style={{ flex: 1, padding: '7px', borderRadius: 999, border: 'none', cursor: 'pointer', background: mode === id ? 'var(--bg2)' : 'transparent', color: mode === id ? 'var(--green)' : 'var(--text3)', fontWeight: mode === id ? 700 : 400, fontSize: '0.78rem' }}>{l}</button>
         ))}
       </div>
+
+      {mode === 'picks' ? (
+        <>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginBottom: 10 }}>
+            {remaining.kcal} kcal left{remaining.protein > 20 ? ` · need ${remaining.protein.toFixed(0)}g protein` : ''} — ranked for your goals & variety
+          </div>
+          {picks.length === 0 ? (
+            <div style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>No picks fit your remaining budget & filters.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {picks.map(p => <PickRow key={p.food.id} {...p} onAdd={onAdd} />)}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginBottom: 8 }}>
+            Set target macros — finds the closest-matching food & serving (least-squares match):
+          </div>
+          {[['Protein', mp, setMp, 'var(--green)', 100], ['Carbs', mc, setMc, '#f59e0b', 200], ['Fat', mf, setMf, '#f87171', 80]].map(([lbl, val, set, col, max]) => (
+            <div key={lbl} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: 2 }}>
+                <span style={{ color: 'var(--text2)' }}>{lbl}</span><span style={{ fontWeight: 700, color: col }}>{val}g</span>
+              </div>
+              <input type="range" min={0} max={max} step={5} value={val} onChange={e => set(+e.target.value)} />
+            </div>
+          ))}
+          <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginBottom: 10 }}>≈ {mp*4 + mc*4 + mf*9} kcal target</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {finds.map(p => <PickRow key={p.food.id} {...p} meta={`±${p.err} off`} onAdd={onAdd} />)}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -590,12 +641,94 @@ function HistoryTab({ logs, targets }) {
   )
 }
 
+// ─── Daily weigh-in + 7-day rolling-average trend ─────────────────────────────
+function WeighInCard({ measurementHistory, unit, onLog }) {
+  const [val, setVal] = useState('')
+  const bw = (measurementHistory || []).filter(r => r.metric === 'bodyweight').sort((a, b) => a.date.localeCompare(b.date))
+  // 7-day rolling average series (last ~21 points)
+  const series = bw.map((r, i) => {
+    const window = bw.slice(Math.max(0, i - 6), i + 1)
+    const avg = window.reduce((s, x) => s + x.value, 0) / window.length
+    return { date: r.date.slice(5), raw: r.value, avg: +avg.toFixed(1) }
+  }).slice(-21)
+  const latest = bw[bw.length - 1]
+  const today = new Date().toISOString().slice(0, 10)
+  const loggedToday = latest?.date === today
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h3>Daily Weigh-In</h3>
+        {latest && <span style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>last: {latest.value}{unit}</span>}
+      </div>
+      {!loggedToday && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: series.length >= 2 ? 12 : 0 }}>
+          <div className="input-unit" style={{ flex: 1 }}>
+            <input className="input" type="number" inputMode="decimal" placeholder="Morning weight" value={val} onChange={e => setVal(e.target.value)} />
+            <span>{unit}</span>
+          </div>
+          <button className="btn btn-primary" onClick={() => { const v = parseFloat(val); if (v > 0) { onLog(v); setVal('') } }} disabled={!val}>Log</button>
+        </div>
+      )}
+      {loggedToday && <div style={{ fontSize: '0.8rem', color: 'var(--green)', marginBottom: series.length >= 2 ? 12 : 0 }}>✓ Logged today: {latest.value}{unit}</div>}
+      {series.length >= 2 && (
+        <ResponsiveContainerLazy series={series} unit={unit} />
+      )}
+    </div>
+  )
+}
+// tiny inline chart (recharts) — kept separate so WeighInCard reads cleanly
+import { LineChart as _LC, Line as _Ln, XAxis as _X, YAxis as _Y, Tooltip as _Tt, ResponsiveContainer as _RC, CartesianGrid as _CG } from 'recharts'
+function ResponsiveContainerLazy({ series, unit }) {
+  return (
+    <_RC width="100%" height={130}>
+      <_LC data={series} margin={{ top: 6, right: 8, bottom: 0, left: -22 }}>
+        <_CG strokeDasharray="3 3" stroke="var(--bg4)" />
+        <_X dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
+        <_Y domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
+        <_Tt contentStyle={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.78rem' }} />
+        <_Ln type="monotone" dataKey="raw" stroke="var(--bg4)" strokeWidth={1} dot={{ r: 2, fill: 'var(--text3)' }} name="Daily" />
+        <_Ln type="monotone" dataKey="avg" stroke="var(--green)" strokeWidth={2.5} dot={false} name={`7-day avg`} />
+      </_LC>
+    </_RC>
+  )
+}
+
+// ─── Quick-add manual macros modal ────────────────────────────────────────────
+function QuickAddModal({ onAdd, onClose }) {
+  const [k, setK] = useState(''), [p, setP] = useState(''), [c, setC] = useState(''), [f, setF] = useState('')
+  const save = () => {
+    const kcal = parseInt(k) || (parseInt(p)||0)*4 + (parseInt(c)||0)*4 + (parseInt(f)||0)*9
+    onAdd({ id: genId(), foodId: 'manual:' + genId(), name: 'Quick add', grams: null, macros: { kcal, protein: +p || 0, carbs: +c || 0, fat: +f || 0, fiber: 0 } })
+    onClose()
+  }
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 320, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ background: 'var(--bg2)', width: '100%', maxWidth: 480, margin: '0 auto', padding: '20px 16px 32px', borderRadius: '16px 16px 0 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3>Quick Add</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text2)', fontSize: '1.25rem', cursor: 'pointer' }}>✕</button>
+        </div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text3)', marginBottom: 12 }}>Enter macros directly. Leave calories blank to auto-calc from P/C/F.</div>
+        <div className="grid-2" style={{ marginBottom: 12 }}>
+          <div><label>Calories</label><input className="input" type="number" inputMode="numeric" value={k} onChange={e => setK(e.target.value)} placeholder="auto" /></div>
+          <div><label>Protein (g)</label><input className="input" type="number" inputMode="decimal" value={p} onChange={e => setP(e.target.value)} placeholder="0" /></div>
+          <div><label>Carbs (g)</label><input className="input" type="number" inputMode="decimal" value={c} onChange={e => setC(e.target.value)} placeholder="0" /></div>
+          <div><label>Fat (g)</label><input className="input" type="number" inputMode="decimal" value={f} onChange={e => setF(e.target.value)} placeholder="0" /></div>
+        </div>
+        <button className="btn btn-primary btn-full" onClick={save}>Add</button>
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Nutrition() {
-  const { profile, sessions, nutritionLogs, addFoodEntry, removeFoodEntry, addExtraActivity, removeExtraActivity } = useStore()
+  const { profile, setProfile, sessions, nutritionLogs, addFoodEntry, removeFoodEntry, addExtraActivity, removeExtraActivity, measurementHistory, addMeasurementEntry } = useStore()
   const [tab, setTab]           = useState('today')
   const [pickingMeal, setPickingMeal] = useState(null)
   const [showActivity, setShowActivity] = useState(false)
+  const [quickAdd, setQuickAdd] = useState(false)
 
   if (!profile) return (
     <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, textAlign: 'center' }}>
@@ -635,6 +768,29 @@ export default function Nutrition() {
   const handleApplyPlan = useCallback((entries) => {
     entries.forEach(({ meal, entry }) => addFoodEntry(todayStr, meal, entry))
   }, [addFoodEntry, todayStr])
+
+  // Copy yesterday's full log into today
+  const copyYesterday = useCallback(() => {
+    const y = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+    const ylog = nutritionLogs[y]
+    if (!ylog) return
+    Object.entries(ylog.meals || {}).forEach(([meal, entries]) =>
+      entries.forEach(e => addFoodEntry(todayStr, meal, { ...e, id: genId() })))
+  }, [nutritionLogs, addFoodEntry, todayStr])
+
+  // Recent food usage counts (last 7 days) — feeds variety-aware recommender
+  const recentCounts = useMemo(() => {
+    const counts = {}; const now = Date.now()
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now - i * 86_400_000).toISOString().slice(0, 10)
+      const log = nutritionLogs[d]; if (!log) continue
+      Object.values(log.meals || {}).flat().forEach(e => { if (e.foodId) counts[e.foodId] = (counts[e.foodId] || 0) + 1 })
+    }
+    return counts
+  }, [nutritionLogs])
+
+  const patterns    = useMemo(() => detectFoodPatterns(nutritionLogs), [nutritionLogs])
+  const calibration = useMemo(() => calorieCalibration(measurementHistory, targets, profile.caloricMode || 'lean_bulk', profile.unit), [measurementHistory, targets.kcal, profile.caloricMode])
 
   // ── Render ───────────────────────────────────────────────────────────────────
   const calorieOver = consumed.kcal > targets.kcal
@@ -745,6 +901,37 @@ export default function Nutrition() {
             )
           })()}
 
+          {/* Calorie auto-calibration */}
+          {calibration && !calibration.onTrack && (
+            <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '1.125rem' }}>⚖️</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', marginBottom: 3 }}>Auto-Calibration</div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', lineHeight: 1.5 }}>{calibration.message}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Pattern insights */}
+          {patterns.map((p, i) => (
+            <div key={i} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 10, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span>{p.icon}</span>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text2)', lineHeight: 1.5 }}>{p.text}</div>
+            </div>
+          ))}
+
+          {/* Daily weigh-in + 7-day trend */}
+          <WeighInCard measurementHistory={measurementHistory} unit={profile.unit} onLog={(v) => {
+            addMeasurementEntry({ id: uuid(), date: todayStr, metric: 'bodyweight', value: v, unit: profile.unit })
+            setProfile({ ...profile, bodyweight: v })
+          }} />
+
+          {/* Quick actions */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button className="btn btn-secondary" style={{ flex: 1, fontSize: '0.8rem' }} onClick={() => setQuickAdd(true)}>⚡ Quick add</button>
+            <button className="btn btn-secondary" style={{ flex: 1, fontSize: '0.8rem' }} onClick={copyYesterday}>📋 Copy yesterday</button>
+          </div>
+
           {/* Meal sections */}
           {MEALS.map(meal => (
             <MealSection
@@ -756,15 +943,14 @@ export default function Nutrition() {
             />
           ))}
 
-          {/* Smart recommendations */}
-          {!calorieOver && remaining.kcal > 50 && (
-            <div className="card">
-              <RecommendPanel
-                remaining={remaining}
-                onAdd={entry => handleAddFood('snacks', entry)}
-              />
-            </div>
-          )}
+          {/* Smart recommendations + macro finder */}
+          <div className="card">
+            <RecommendPanel
+              remaining={remaining}
+              recentCounts={recentCounts}
+              onAdd={entry => handleAddFood('snacks', entry)}
+            />
+          </div>
 
           {calorieOver && (
             <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 'var(--radius)', padding: '12px 16px', marginBottom: 16, fontSize: '0.875rem', color: '#f87171', textAlign: 'center' }}>
@@ -785,6 +971,7 @@ export default function Nutrition() {
       )}
 
       {/* ── Modals ── */}
+      {quickAdd && <QuickAddModal onAdd={entry => handleAddFood('snacks', entry)} onClose={() => setQuickAdd(false)} />}
       {pickingMeal && (
         <FoodPicker
           meal={pickingMeal}

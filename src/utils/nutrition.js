@@ -1,4 +1,44 @@
-import { FOODS, getFoodMacros, searchFoods } from '../data/foods.js'
+import { FOODS, FOOD_INDEX, getFoodMacros, searchFoods } from '../data/foods.js'
+
+// ─── DIETARY FILTERING ────────────────────────────────────────────────────────
+const FISH_RE = /salmon|tuna|fish|sardine|mackerel|anchov|cod|tilapia|halibut|trout|bass|mahi|haddock|snapper|swordfish|herring|catfish|shrimp|crab|lobster|scallop|oyster|clam|mussel|octopus|calamari|prawn/i
+const DAIRY_EGG_RE = /egg|yogurt|cheese|whey|casein|cottage|milk|protein powder|skyr|kefir|ricotta|paneer/i
+
+function isFlesh(food) { // meat or fish (not dairy/eggs/plant)
+  if (food.tags?.includes('vegan')) return false
+  if (food.category === 'fast_food') return /chicken|beef|steak|burger|bacon|sausage|fish|shrimp|pork|turkey|meat|wing|nugget|tender/i.test(food.name)
+  if (food.category !== 'protein') return false
+  if (DAIRY_EGG_RE.test(food.name)) return false
+  return true
+}
+function isAnimal(food) {
+  if (food.tags?.includes('vegan')) return false
+  if (['protein', 'dairy'].includes(food.category)) return true
+  if (['butter', 'ghee', 'niter_kibbeh'].includes(food.id)) return true
+  if (food.category === 'fast_food') return true
+  return false
+}
+function isFish(food) { return FISH_RE.test(food.name) }
+
+export function dietaryFilter(food, prefs = {}) {
+  const { diet = 'none', clean = false, avoidFastFood = false } = prefs
+  if (diet === 'vegan'        && isAnimal(food)) return false
+  if (diet === 'vegetarian'   && isFlesh(food)) return false
+  if (diet === 'pescatarian'  && isFlesh(food) && !isFish(food)) return false
+  if (avoidFastFood && food.category === 'fast_food') return false
+  if (clean) {
+    if (food.category === 'fast_food' || food.category === 'snack') return false
+    if (food.category === 'drink' && food.per100g.carbs > 3) return false // sugary drinks
+  }
+  return true
+}
+
+export const DIET_OPTIONS = [
+  { id: 'none',        label: 'No restriction' },
+  { id: 'vegetarian',  label: 'Vegetarian' },
+  { id: 'vegan',       label: 'Vegan' },
+  { id: 'pescatarian', label: 'Pescatarian' },
+]
 
 // ─── TDEE & MACRO TARGETS ────────────────────────────────────────────────────
 
@@ -288,7 +328,6 @@ export function generateMealPlan(targets) {
 }
 
 // Fast ID→food map (built once)
-import { FOOD_INDEX } from '../data/foods.js'
 const FOOD_INDEX_MAP = FOOD_INDEX
 
 // ─── LOG MACRO TOTALS ────────────────────────────────────────────────────────
@@ -368,4 +407,128 @@ export function getMacroCoaching(targets, consumed) {
 
   return { tone: 'neutral', priority: 'balanced',
     message: `Log your meals to get personalized macro coaching for the rest of the day.` }
+}
+
+// ─── SMARTER FOOD RECOMMENDER ─────────────────────────────────────────────────
+// Considers: dietary prefs, protein urgency, calorie fit, macro balance,
+// "eat clean" boost, and penalizes foods you've leaned on a lot this week.
+export function getSmartPicks(remaining, prefs = {}, recentCounts = {}, n = 6) {
+  const { kcal: remK, protein: remP, carbs: remC, fat: remF } = remaining
+  if (remK <= 40) return []
+  const proteinUrgent = remP > 25  // big protein gap → bias protein-dense foods
+  const picks = []
+
+  for (const food of FOODS) {
+    if (food.category === 'drink' && food.per100g.kcal === 0) continue
+    if (!dietaryFilter(food, prefs)) continue
+
+    // grams that fit the remaining calories (cap at default serving or fit)
+    const defaultG = food.serving.amount
+    let grams = defaultG
+    const full = getFoodMacros(food, grams)
+    if (full.kcal > remK * 1.05) grams = Math.max(20, Math.floor((remK / full.kcal) * defaultG / 10) * 10)
+    const m = getFoodMacros(food, grams)
+    if (m.kcal === 0 || m.kcal > remK * 1.12) continue
+
+    const proteinDensity = food.per100g.kcal ? food.per100g.protein / food.per100g.kcal * 100 : 0
+    const proteinFill = remP > 0 ? Math.min(m.protein / remP, 1) : 0
+    const calFill     = Math.min(m.kcal / remK, 1)
+    const carbFill    = remC > 0 ? Math.min(m.carbs / remC, 1) : 0
+    const fatFill     = remF > 0 ? Math.min(m.fat / remF, 1) : 0
+
+    let score = 0
+    score += proteinFill * (proteinUrgent ? 55 : 35)
+    score += proteinDensity * (proteinUrgent ? 1.5 : 0.6)   // reward protein-per-calorie
+    score += calFill * 22
+    score += carbFill * 9 + fatFill * 8
+    if (m.kcal > remK) score -= 35                          // overshoot penalty
+    if (food.tags?.includes('whole-food')) score += 8       // clean bonus
+    if (food.tags?.includes('high-protein')) score += 6
+    const used = recentCounts[food.id] || 0
+    score -= used * 6                                        // variety: penalize repeats
+    if (food.category === 'fast_food') score -= 4
+
+    picks.push({ food, grams, macros: m, score })
+  }
+  return picks.sort((a, b) => b.score - a.score).slice(0, n)
+}
+
+// ─── 3-MACRO FINDER (least-squares match) ─────────────────────────────────────
+// Given desired grams of protein/carbs/fat, find foods + serving sizes that best match.
+export function findClosestFoods(target, prefs = {}, n = 6) {
+  const { protein: P = 0, carbs: C = 0, fat: F = 0 } = target
+  if (P + C + F <= 0) return []
+  const out = []
+  for (const food of FOODS) {
+    if (!dietaryFilter(food, prefs)) continue
+    const p = food.per100g.protein / 100, c = food.per100g.carbs / 100, f = food.per100g.fat / 100
+    const denom = p * p + c * c + f * f
+    if (denom < 1e-6) continue
+    // least-squares optimal grams projecting target onto this food's macro vector
+    let g = (P * p + C * c + F * f) / denom
+    if (g < 10) continue
+    g = Math.min(Math.round(g / 5) * 5, 700)
+    const m = getFoodMacros(food, g)
+    const err = Math.sqrt((m.protein - P) ** 2 + (m.carbs - C) ** 2 + (m.fat - F) ** 2)
+    out.push({ food, grams: g, macros: m, err: +err.toFixed(1) })
+  }
+  return out.sort((a, b) => a.err - b.err).slice(0, n)
+}
+
+// ─── FOOD PATTERN DETECTION (last 7 days) ─────────────────────────────────────
+export function detectFoodPatterns(nutritionLogs = {}) {
+  const now = Date.now()
+  const catCount = {}, foodCount = {}
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now - i * 86_400_000).toISOString().slice(0, 10)
+    const log = nutritionLogs[d]
+    if (!log) continue
+    Object.values(log.meals || {}).flat().forEach(e => {
+      foodCount[e.foodId] = (foodCount[e.foodId] || 0) + 1
+      const f = FOOD_INDEX.get(e.foodId)
+      if (f) catCount[f.category] = (catCount[f.category] || 0) + 1
+    })
+  }
+  const insights = []
+  if ((catCount.fast_food || 0) >= 4)
+    insights.push({ icon: '🍔', text: `You've logged fast food ${catCount.fast_food}× this week. Try swapping one for a home-cooked high-protein meal — your waistline and recovery will thank you.` })
+  const repeated = Object.entries(foodCount).filter(([, c]) => c >= 5)
+  if (repeated.length) {
+    const f = FOOD_INDEX.get(repeated[0][0])
+    if (f) insights.push({ icon: '🔁', text: `${f.name} ${repeated[0][1]}× this week — great consistency, but rotate in other foods for a wider micronutrient spread.` })
+  }
+  const veg = (catCount.vegetable || 0) + (catCount.fruit || 0)
+  if (Object.keys(catCount).length > 0 && veg < 4)
+    insights.push({ icon: '🥦', text: `Only ${veg} fruit/veg servings logged this week. Add more for fiber, micros and digestion.` })
+  return insights
+}
+
+// ─── CALORIE AUTO-CALIBRATION ─────────────────────────────────────────────────
+// Compares actual bodyweight trend vs the goal and suggests a kcal adjustment.
+export function calorieCalibration(measurementHistory = [], targets, caloricMode = 'lean_bulk', unit = 'kg') {
+  const bw = measurementHistory.filter(r => r.metric === 'bodyweight').sort((a, b) => a.date.localeCompare(b.date))
+  if (bw.length < 2) return null
+  const first = bw[0], last = bw[bw.length - 1]
+  const days = Math.max(1, (new Date(last.date) - new Date(first.date)) / 86_400_000)
+  if (days < 10) return null  // need ~1.5+ weeks of data
+  const perWeek = (last.value - first.value) / (days / 7)
+  const bwNow = last.value
+  const pctWeek = perWeek / bwNow * 100
+
+  // target weekly change by mode (% of bodyweight)
+  const goalPct = { aggressive_bulk: 0.5, lean_bulk: 0.3, maintenance: 0, cut: -0.6 }[caloricMode] ?? 0.3
+  const diff = pctWeek - goalPct  // + = gaining too fast, - = too slow
+  const kcalPerUnit = unit === 'kg' ? 7700 : 3500
+  // kcal adjustment ≈ (goal - actual)%/wk * bw * kcal/unit / 7 days
+  const kcalAdj = Math.round(((goalPct - pctWeek) / 100 * bwNow * kcalPerUnit) / 7 / 50) * 50
+
+  if (Math.abs(kcalAdj) < 75) return { onTrack: true, message: `On track — gaining ${perWeek > 0 ? '+' : ''}${perWeek.toFixed(2)}${unit}/wk, right where you want to be.`, perWeek: +perWeek.toFixed(2) }
+  const dir = kcalAdj > 0 ? 'increase' : 'reduce'
+  return {
+    onTrack: false,
+    perWeek: +perWeek.toFixed(2),
+    kcalAdj,
+    newTarget: targets ? Math.max(1200, targets.kcal + kcalAdj) : null,
+    message: `You're trending ${perWeek > 0 ? '+' : ''}${perWeek.toFixed(2)}${unit}/wk (goal ≈ ${(goalPct/100*bwNow).toFixed(2)}${unit}/wk). ${dir === 'increase' ? 'Add' : 'Cut'} ~${Math.abs(kcalAdj)} kcal/day${targets ? ` → ${Math.max(1200, targets.kcal + kcalAdj)} kcal` : ''}.`,
+  }
 }
