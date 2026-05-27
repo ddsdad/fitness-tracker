@@ -19,6 +19,7 @@ export function StoreProvider({ children }) {
   const [measurementHistory, setMeasurementHistoryState] = useState([])
   const [recipes,            setRecipesState]         = useState([])
   const [customExercises,    setCustomExercisesState] = useState([])
+  const [routines,           setRoutinesState]        = useState([])
   const [loaded,             setLoaded]               = useState(false)
   const [user,               setUser]                 = useState(null)
   const [syncStatus,         setSyncStatus]           = useState('idle')
@@ -41,6 +42,7 @@ export function StoreProvider({ children }) {
     setMeasurementHistoryState(storage.getMeasurementHistory())
     setRecipesState(storage.getRecipes())
     setCustomExercisesState(storage.getCustomExercises())
+    setRoutinesState(storage.getRoutines())
     setLoaded(true)
   }, [])
 
@@ -216,10 +218,13 @@ export function StoreProvider({ children }) {
     setCustomExercisesState(storage.getCustomExercises())
   }, [])
 
+  const addRoutine = useCallback((r) => { storage.addRoutine(r); setRoutinesState(storage.getRoutines()) }, [])
+  const deleteRoutine = useCallback((id) => { storage.deleteRoutine(id); setRoutinesState(storage.getRoutines()) }, [])
+
   const resetApp = useCallback(async () => {
     storage.clearAll()
     setProfileState(null); setSessionsState([]); setCheckinsState([])
-    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([]); setRecipesState([]); setCustomExercisesState([])
+    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([]); setRecipesState([]); setCustomExercisesState([]); setRoutinesState([])
     if (userRef.current) { await supabase.auth.signOut(); setUser(null); userRef.current = null }
     localStorage.removeItem('ft_auth_skipped')
   }, [])
@@ -240,6 +245,7 @@ export function StoreProvider({ children }) {
       measurementHistory, addMeasurementEntry,
       recipes, addRecipe, deleteRecipe,
       customExercises, addCustomExercise,
+      routines, addRoutine, deleteRoutine,
       loaded, resetApp,
       user, syncStatus, signOut,
     }}>
