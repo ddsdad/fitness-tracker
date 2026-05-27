@@ -59,7 +59,7 @@ export default function Onboarding({ onComplete }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: 3, background: 'var(--bg3)' }}>
         <div style={{ height: '100%', width: `${(step / (STEPS.length - 1)) * 100}%`, background: 'var(--green)', transition: 'width 0.3s ease' }} />
       </div>

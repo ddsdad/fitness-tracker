@@ -140,9 +140,62 @@ function RestTimer({ seconds, onDone }) {
 }
 
 // ── Exercise picker modal ─────────────────────────────────────────────────────
+const MUSCLE_OPTIONS = Object.keys(MUSCLE_GROUPS)
 function ExercisePicker({ onSelect, onClose }) {
+  const { customExercises, addCustomExercise } = useStore()
   const [query, setQuery] = useState('')
-  const results = query.length > 1 ? searchExercises(query) : EXERCISES
+  const [creating, setCreating] = useState(false)
+  // form state
+  const [cName, setCName]   = useState('')
+  const [cPrim, setCPrim]   = useState('chest')
+  const [cEquip, setCEquip] = useState('barbell')
+  const [cCat, setCCat]     = useState('compound')
+
+  const all = [...customExercises, ...EXERCISES]
+  const results = query.length > 1
+    ? all.filter(e => e.name.toLowerCase().includes(query.toLowerCase()))
+    : all
+
+  const createAndSelect = () => {
+    if (!cName.trim()) return
+    const ex = { id: 'custom_' + Math.random().toString(36).slice(2,9), name: cName.trim(), primary: cPrim, secondary: [], category: cCat, equipment: cEquip, custom: true, notes: '' }
+    addCustomExercise(ex)
+    onSelect(ex)
+  }
+
+  if (creating) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 210, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ background: 'var(--bg2)', flex: 1, marginTop: 'auto', borderRadius: '20px 20px 0 0', maxHeight: '85vh', overflowY: 'auto', padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3>New Custom Exercise</h3>
+            <button className="btn btn-ghost" style={{ padding: 8 }} onClick={() => setCreating(false)}><IconX /></button>
+          </div>
+          <label>Name</label>
+          <input className="input" value={cName} onChange={e => setCName(e.target.value)} placeholder="e.g. Smith Machine Press" autoFocus style={{ marginBottom: 12 }} />
+          <label>Primary muscle</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {MUSCLE_OPTIONS.map(m => (
+              <button key={m} onClick={() => setCPrim(m)} style={{ padding: '5px 10px', borderRadius: 999, border: `1px solid ${cPrim === m ? 'var(--green)' : 'var(--border)'}`, background: cPrim === m ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: cPrim === m ? 'var(--green)' : 'var(--text2)', fontSize: '0.7rem', cursor: 'pointer' }}>{MUSCLE_GROUPS[m].label}</button>
+            ))}
+          </div>
+          <label>Equipment</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {['barbell','dumbbell','machine','cable','bodyweight','bands','kettlebell'].map(eq => (
+              <button key={eq} onClick={() => setCEquip(eq)} style={{ padding: '5px 10px', borderRadius: 999, border: `1px solid ${cEquip === eq ? 'var(--green)' : 'var(--border)'}`, background: cEquip === eq ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: cEquip === eq ? 'var(--green)' : 'var(--text2)', fontSize: '0.7rem', cursor: 'pointer', textTransform: 'capitalize' }}>{eq}</button>
+            ))}
+          </div>
+          <label>Type</label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+            {['compound','isolation'].map(c => (
+              <button key={c} onClick={() => setCCat(c)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: `1px solid ${cCat === c ? 'var(--green)' : 'var(--border)'}`, background: cCat === c ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: cCat === c ? 'var(--green)' : 'var(--text2)', textTransform: 'capitalize', cursor: 'pointer' }}>{c}</button>
+            ))}
+          </div>
+          <button className="btn btn-primary btn-full" onClick={createAndSelect} disabled={!cName.trim()}>Create & Add</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', flexDirection: 'column' }}>
@@ -153,6 +206,9 @@ function ExercisePicker({ onSelect, onClose }) {
             <button className="btn btn-ghost" style={{ padding: 8 }} onClick={onClose}><IconX /></button>
           </div>
           <input className="input" placeholder="Search exercises..." value={query} onChange={e => setQuery(e.target.value)} autoFocus />
+          <button className="btn btn-secondary btn-full" style={{ marginTop: 8 }} onClick={() => { setCName(query); setCreating(true) }}>
+            <IconPlus /> Create custom exercise
+          </button>
         </div>
         <div style={{ overflowY: 'auto', padding: '12px 16px 32px' }}>
           {results.map(ex => (
@@ -408,7 +464,7 @@ function SessionSummary({ exercises }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function WorkoutSession({ mode, session: initialSession, onDone, initialExercises }) {
+export default function WorkoutSession({ mode, session: initialSession, onDone, initialExercises, onRepeat }) {
   const { addSession, deleteSession, updateSession, sessions, profile, setProfile } = useStore()
 
   // Build initial exercises from either a pre-loaded plan or an existing session
@@ -501,7 +557,7 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
   // Post-session coach feedback overlay
   if (feedback) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg)', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
         <div style={{ fontSize: 56, marginBottom: 12 }}>{feedback.prs.length ? '🏆' : '💪'}</div>
         <h2 style={{ marginBottom: 8 }}>{feedback.headline}</h2>
         <div style={{ maxWidth: 360, marginBottom: 24 }}>
@@ -515,7 +571,7 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg)' }}>
       {showPicker && <ExercisePicker onSelect={addExercise} onClose={() => setShowPicker(false)} />}
 
       {/* Header */}
@@ -583,15 +639,22 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
         ))}
 
         {!isView && (
-          <button className="btn btn-secondary btn-full" style={{ marginBottom: 120 }} onClick={() => setShowPicker(true)}>
+          <button className="btn btn-secondary btn-full" style={{ marginBottom: 16 }} onClick={() => setShowPicker(true)}>
             <IconPlus /> Add Exercise
+          </button>
+        )}
+
+        {/* Repeat this workout */}
+        {isView && onRepeat && (
+          <button className="btn btn-primary btn-full" style={{ marginTop: 8, marginBottom: 16 }} onClick={() => onRepeat(initialSession)}>
+            🔁 Repeat This Workout
           </button>
         )}
       </div>
 
       {/* Footer */}
       {!isView && (
-        <div style={{ padding: '12px 16px 28px', background: 'var(--bg2)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ padding: '12px 16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', background: 'var(--bg2)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text3)', textAlign: 'center', marginBottom: 10 }}>
             {exercises.reduce((s,e) => s + e.sets.filter(s=>s.done).length, 0)}/
             {exercises.reduce((s,e) => s + e.sets.length, 0)} sets complete

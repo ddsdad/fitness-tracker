@@ -9,6 +9,7 @@ import { structuralRiskScore } from '../../utils/balance.js'
 import { getWeekScheduleData } from '../../utils/recommendations.js'
 import { weeklyReport } from '../../utils/coach.js'
 import Compete from '../Compete/Compete.jsx'
+import Settings from '../Settings/Settings.jsx'
 
 const TIME_WINDOWS = [{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: 'All', days: 365 }]
 
@@ -171,6 +172,7 @@ export default function Dashboard() {
   const [window_, setWindow_] = useState(7)
   const [activeMuscle, setActiveMuscle] = useState(null)
   const [tab, setTab] = useState('heatmap') // heatmap | schedule | compete | stats
+  const [showSettings, setShowSettings] = useState(false)
 
   const muscleVolume = getMuscleVolume(sessions, window_)
   const goalId = profile?.physiqueGoal || 'overall_size'
@@ -199,14 +201,20 @@ export default function Dashboard() {
             <h1>{profile?.name ? `Hey, ${profile.name} 👋` : 'Muscle Heatmap'}</h1>
             <p>Week {currentWeek} · {weeksLeft} weeks left</p>
           </div>
-          {/* Risk gauge */}
-          <div style={{ textAlign: 'center', background: 'var(--bg2)', border: `1px solid ${risk.color}22`, borderRadius: 10, padding: '8px 12px', minWidth: 64 }}>
-            <div style={{ fontSize: '1.125rem', fontWeight: 700, color: risk.color }}>{risk.score}</div>
-            <div style={{ fontSize: '0.625rem', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Risk</div>
-            <div style={{ fontSize: '0.625rem', color: risk.color, fontWeight: 600 }}>{risk.level}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Risk gauge */}
+            <div style={{ textAlign: 'center', background: 'var(--bg2)', border: `1px solid ${risk.color}22`, borderRadius: 10, padding: '8px 12px', minWidth: 64 }}>
+              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: risk.color }}>{risk.score}</div>
+              <div style={{ fontSize: '0.625rem', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Risk</div>
+              <div style={{ fontSize: '0.625rem', color: risk.color, fontWeight: 600 }}>{risk.level}</div>
+            </div>
+            {/* Settings */}
+            <button onClick={() => setShowSettings(true)} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, width: 38, height: 44, fontSize: '1.1rem', cursor: 'pointer', color: 'var(--text2)' }} aria-label="Settings">⚙️</button>
           </div>
         </div>
       </div>
+
+      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
 
       {/* Quick stats */}
       <div className="grid-3" style={{ marginBottom: 20 }}>

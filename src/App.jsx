@@ -30,7 +30,7 @@ function AppInner() {
   // Loading spinner
   if (!loaded) {
     return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh', flexDirection:'column', gap:16 }}>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ width:40, height:40, borderRadius:'50%', border:'3px solid var(--bg3)', borderTop:'3px solid var(--green)', animation:'spin 0.8s linear infinite' }} />
       </div>

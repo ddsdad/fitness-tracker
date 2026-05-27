@@ -33,7 +33,7 @@ export default function AuthGate({ onSkip }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', minHeight: '100vh', padding: '32px 24px', gap: 0,
+      justifyContent: 'center', minHeight: '100dvh', padding: '32px 24px', gap: 0,
     }}>
       {/* Hero */}
       <div style={{ textAlign: 'center', marginBottom: 32 }}>

@@ -4,10 +4,21 @@ import WorkoutSession from './WorkoutSession.jsx'
 import { IconPlus, IconChevronRight, IconFlame, IconTimer } from '../shared/Icons.jsx'
 import { format, parseISO } from 'date-fns'
 
+const rid = () => Math.random().toString(36).slice(2, 10)
+// Build fresh session exercises from a logged session (pre-fill weights, reset done)
+function buildRepeat(session) {
+  return (session.exercises || []).map(ex => ({
+    id: rid(), exerciseId: ex.exerciseId, name: ex.name,
+    primaryMuscle: ex.primaryMuscle, secondaryMuscles: ex.secondaryMuscles || [],
+    sets: (ex.sets || []).filter(s => !s.warmup).map(s => ({ id: rid(), weight: s.weight, reps: s.reps, restSeconds: s.restSeconds || 90, done: false })),
+  }))
+}
+
 export default function WorkoutLog({ onNavigate, preloadedPlan, onPreloadConsumed }) {
   const { sessions } = useStore()
   const [view, setView] = useState(preloadedPlan ? 'new' : 'list')
   const [activeSession, setActiveSession] = useState(null)
+  const [repeatEx, setRepeatEx] = useState(null)
 
   // If a plan was passed in, open the new-session view immediately
   const [consumedPlan] = useState(preloadedPlan)
@@ -16,13 +27,18 @@ export default function WorkoutLog({ onNavigate, preloadedPlan, onPreloadConsume
     return (
       <WorkoutSession
         mode="new"
-        initialExercises={consumedPlan || undefined}
-        onDone={() => { setView('list'); onPreloadConsumed?.() }}
+        initialExercises={consumedPlan || repeatEx || undefined}
+        onDone={() => { setView('list'); setRepeatEx(null); onPreloadConsumed?.() }}
       />
     )
   }
   if (view === 'detail' && activeSession) {
-    return <WorkoutSession mode="view" session={activeSession} onDone={() => { setView('list'); setActiveSession(null) }} />
+    return <WorkoutSession
+      mode="view"
+      session={activeSession}
+      onDone={() => { setView('list'); setActiveSession(null) }}
+      onRepeat={(s) => { setRepeatEx(buildRepeat(s)); setActiveSession(null); setView('new') }}
+    />
   }
 
   const grouped = groupByDate(sessions)

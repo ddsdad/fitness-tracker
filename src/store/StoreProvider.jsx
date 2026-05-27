@@ -18,6 +18,7 @@ export function StoreProvider({ children }) {
   const [nutritionLogs,      setNutritionLogsState]   = useState({})
   const [measurementHistory, setMeasurementHistoryState] = useState([])
   const [recipes,            setRecipesState]         = useState([])
+  const [customExercises,    setCustomExercisesState] = useState([])
   const [loaded,             setLoaded]               = useState(false)
   const [user,               setUser]                 = useState(null)
   const [syncStatus,         setSyncStatus]           = useState('idle')
@@ -39,6 +40,7 @@ export function StoreProvider({ children }) {
     setNutritionLogsState(storage.getNutritionLogs())
     setMeasurementHistoryState(storage.getMeasurementHistory())
     setRecipesState(storage.getRecipes())
+    setCustomExercisesState(storage.getCustomExercises())
     setLoaded(true)
   }, [])
 
@@ -209,10 +211,15 @@ export function StoreProvider({ children }) {
     push(uid => saveRecipes(uid, r))
   }, [])
 
+  const addCustomExercise = useCallback((ex) => {
+    storage.addCustomExercise(ex)
+    setCustomExercisesState(storage.getCustomExercises())
+  }, [])
+
   const resetApp = useCallback(async () => {
     storage.clearAll()
     setProfileState(null); setSessionsState([]); setCheckinsState([])
-    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([]); setRecipesState([])
+    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([]); setRecipesState([]); setCustomExercisesState([])
     if (userRef.current) { await supabase.auth.signOut(); setUser(null); userRef.current = null }
     localStorage.removeItem('ft_auth_skipped')
   }, [])
@@ -232,6 +239,7 @@ export function StoreProvider({ children }) {
       nutritionLogs, addFoodEntry, removeFoodEntry, addExtraActivity, removeExtraActivity,
       measurementHistory, addMeasurementEntry,
       recipes, addRecipe, deleteRecipe,
+      customExercises, addCustomExercise,
       loaded, resetApp,
       user, syncStatus, signOut,
     }}>

@@ -6,6 +6,7 @@ const KEYS = {
   NUTRITION:   'ft_nutrition',
   MHISTORY:    'ft_mhistory',
   RECIPES:     'ft_recipes',
+  CUSTOM_EX:   'ft_custom_exercises',
 }
 
 function get(key) {
@@ -104,6 +105,10 @@ export const storage = {
   setRecipes: (r) => set(KEYS.RECIPES, r),
   addRecipe: (recipe) => { const r = storage.getRecipes(); r.unshift(recipe); storage.setRecipes(r) },
   deleteRecipe: (id) => storage.setRecipes(storage.getRecipes().filter(x => x.id !== id)),
+
+  // Custom exercises: [{ id, name, primary, secondary, category, equipment, custom:true }]
+  getCustomExercises: () => get(KEYS.CUSTOM_EX) || [],
+  addCustomExercise: (ex) => { const c = storage.getCustomExercises(); c.push(ex); set(KEYS.CUSTOM_EX, c) },
 
   clearAll: () => Object.values(KEYS).forEach(k => localStorage.removeItem(k)),
 }
