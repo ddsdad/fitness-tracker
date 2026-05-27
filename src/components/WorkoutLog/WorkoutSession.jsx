@@ -512,7 +512,7 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
   const buildInitialExercises = () => {
     if (initialExercises?.length) return initialExercises
     if (initialSession?.exercises) {
-      return initialSession.exercises.map(e => ({ ...e, sets: e.sets.map(s => ({ ...s, id: s.id || genId() })) }))
+      return (initialSession.exercises || []).map(e => ({ ...e, sets: (e.sets || []).map(s => ({ ...s, id: s.id || genId() })) }))
     }
     return []
   }
@@ -655,7 +655,7 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
         {/* View-mode stats */}
         {isView && (
           <div className="grid-3" style={{ marginBottom: 16 }}>
-            <div className="stat-block"><div className="val text-green">{initialSession?.exercises.reduce((s,e) => s + e.sets.length, 0)}</div><div className="lbl">Sets</div></div>
+            <div className="stat-block"><div className="val text-green">{(initialSession?.exercises || []).reduce((s,e) => s + (e.sets || []).length, 0)}</div><div className="lbl">Sets</div></div>
             <div className="stat-block"><div className="val">{initialSession?.totalVolume >= 1000 ? `${(initialSession.totalVolume/1000).toFixed(1)}k` : initialSession?.totalVolume}</div><div className="lbl">Volume</div></div>
             <div className="stat-block"><div className="val">{initialSession?.duration || '—'}m</div><div className="lbl">Duration</div></div>
           </div>

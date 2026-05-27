@@ -13,8 +13,8 @@ export function getMuscleVolume(sessions, daysBack = 7) {
   sessions
     .filter(s => new Date(s.date) >= cutoff)
     .forEach(session => {
-      session.exercises.forEach(ex => {
-        const count = ex.sets.filter(s => !s.warmup).length  // warm-ups don't count as working volume
+      ;(session.exercises || []).forEach(ex => {
+        const count = (ex.sets || []).filter(s => !s.warmup).length  // warm-ups don't count as working volume
         if (sets[ex.primaryMuscle] !== undefined) sets[ex.primaryMuscle] += count
         ex.secondaryMuscles?.forEach(sm => {
           if (sets[sm] !== undefined) sets[sm] += count * 0.5

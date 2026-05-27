@@ -182,7 +182,7 @@ function SessionCard({ session, onClick }) {
         <div>
           <div style={{ fontWeight: 600 }}>{session.name || 'Workout'}</div>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginTop: 2 }}>
-            {session.exercises.length} exercises · {session.exercises.reduce((s,e) => s + e.sets.length, 0)} sets
+            {(session.exercises || []).length} exercises · {(session.exercises || []).reduce((s,e) => s + (e.sets || []).length, 0)} sets
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>

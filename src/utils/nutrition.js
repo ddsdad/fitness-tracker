@@ -42,12 +42,15 @@ export const DIET_OPTIONS = [
 
 // ─── TDEE & MACRO TARGETS ────────────────────────────────────────────────────
 
+// NEAT-only multipliers — represent daily life EXCLUDING logged workouts.
+// (Logged sessions + extra activities are added on top, so the standard
+//  exercise-inclusive multipliers would double-count training.)
 const ACTIVITY_MULTS = {
   sedentary:   1.2,
-  light:       1.375,
-  moderate:    1.55,
-  active:      1.725,
-  very_active: 1.9,
+  light:       1.3,
+  moderate:    1.375,
+  active:      1.45,
+  very_active: 1.55,
 }
 
 // MET values for exercise types (kcal/kg/hour = MET)
