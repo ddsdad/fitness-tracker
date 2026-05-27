@@ -2,10 +2,89 @@ import { useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { useStore } from '../../store/useStore.js'
 import { getCurrentWeek, getProgressStatus, getStatusLabel, detectTrainingLevel, TRAINING_LEVEL_META } from '../../utils/milestones.js'
-import { caseyButtCeiling, lbmAndFat, navyBF } from '../../utils/calculations.js'
+import { caseyButtCeiling, lbmAndFat, navyBF, epley1RM } from '../../utils/calculations.js'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { IconPlus, IconCheck, IconArrowDown } from '../shared/Icons.jsx'
-import { e1rmTrend, topTrackedExercises, detectPlateau, weeklyVolumeSeries, bestWorstWeeks, gainRate, projectStrength } from '../../utils/analytics.js'
+import { e1rmTrend, topTrackedExercises, detectPlateau, weeklyVolumeSeries, bestWorstWeeks, gainRate, projectStrength, computePRs, exerciseDetail } from '../../utils/analytics.js'
+
+// ── Rep-max calculator tool ───────────────────────────────────────────────────
+function RepMaxCalc({ unit }) {
+  const [w, setW] = useState('')
+  const [r, setR] = useState('')
+  const weight = parseFloat(w), reps = parseInt(r)
+  const orm = weight > 0 && reps > 0 ? epley1RM(weight, reps) : 0
+  const PCTS = [100, 95, 90, 85, 80, 75, 70, 65, 60]
+  // estimate reps possible at a given %1RM (inverse Epley-ish)
+  const repsAt = (pct) => { const load = orm * pct / 100; return Math.max(1, Math.round((orm / load - 1) / 0.0333)) }
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h3 style={{ marginBottom: 10 }}>1RM Calculator</h3>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <div className="input-unit" style={{ flex: 1 }}>
+          <input className="input" type="number" inputMode="decimal" placeholder="Weight" value={w} onChange={e => setW(e.target.value)} />
+          <span>{unit}</span>
+        </div>
+        <input className="input" type="number" inputMode="numeric" placeholder="Reps" value={r} onChange={e => setR(e.target.value)} style={{ flex: 1 }} />
+      </div>
+      {orm > 0 && (
+        <>
+          <div style={{ textAlign: 'center', padding: '8px 0', marginBottom: 8 }}>
+            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--green)' }}>{orm.toFixed(1)}</span>
+            <span style={{ color: 'var(--text3)', marginLeft: 4 }}>{unit} est. 1RM</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
+            {PCTS.map(p => (
+              <div key={p} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '6px 4px', textAlign: 'center' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{(orm * p / 100).toFixed(1)}</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text3)' }}>{p}% · ~{repsAt(p)} reps</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Per-exercise history modal ────────────────────────────────────────────────
+function ExerciseDetailModal({ sessions, exerciseId, name, unit, onClose }) {
+  const rows = exerciseDetail(sessions, exerciseId).slice(0, 10)
+  const allTime = rows.reduce((m, r) => Math.max(m, r.e1rm), 0)
+  const trend = e1rmTrend(sessions, exerciseId)
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 300, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'var(--bg2)', marginTop: 'auto', borderRadius: '16px 16px 0 0', maxHeight: '88dvh', overflowY: 'auto', padding: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <h3>{name}</h3>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>All-time est. 1RM: <strong style={{ color: 'var(--green)' }}>{allTime}{unit}</strong></div>
+          </div>
+          <button className="btn btn-ghost" onClick={onClose} style={{ fontSize: '1.25rem' }}>✕</button>
+        </div>
+        {trend.length >= 2 && (
+          <ResponsiveContainer width="100%" height={130}>
+            <LineChart data={trend} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--bg4)" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} domain={['auto','auto']} />
+              <Tooltip contentStyle={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.8rem' }} />
+              <Line type="monotone" dataKey="e1rm" stroke="var(--green)" strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+        <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', margin: '12px 0 6px' }}>Last {rows.length} sessions</div>
+        {rows.map((r, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--bg3)' }}>
+            <div style={{ flex: 1, fontSize: '0.8125rem' }}>{new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text2)' }}>{r.sets} sets</div>
+            <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>top {r.topSet.weight}×{r.topSet.reps}</div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--yellow)' }}>{r.e1rm}{unit}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── Streak calculation ────────────────────────────────────────────────────────
 function calcStreak(sessions) {
@@ -203,12 +282,15 @@ function HistorySparkline({ history, metric, color = 'var(--green)' }) {
 function InsightsTab({ sessions, profile, measurementHistory }) {
   const tracked = topTrackedExercises(sessions, 6)
   const [exId, setExId] = useState(tracked[0]?.id || null)
+  const [detailEx, setDetailEx] = useState(null)
   const trend = exId ? e1rmTrend(sessions, exId) : []
   const plateau = exId ? detectPlateau(sessions, exId) : null
   const projection = projectStrength(trend)
   const volSeries = weeklyVolumeSeries(sessions).slice(-10)
   const bw = bestWorstWeeks(sessions)
   const gain = gainRate(measurementHistory, profile.unit)
+  const { records, feed } = computePRs(sessions)
+  const u = profile.unit
 
   if (sessions.length === 0) {
     return <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
@@ -219,9 +301,17 @@ function InsightsTab({ sessions, profile, measurementHistory }) {
 
   return (
     <>
+      {detailEx && <ExerciseDetailModal sessions={sessions} exerciseId={detailEx.id} name={detailEx.name} unit={u} onClose={() => setDetailEx(null)} />}
+
+      {/* Rep-max calculator */}
+      <RepMaxCalc unit={u} />
+
       {/* Strength trend */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginBottom: 10 }}>Estimated 1RM Trend</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h3>Estimated 1RM Trend</h3>
+          {exId && <button onClick={() => { const t = tracked.find(x => x.id === exId); if (t) setDetailEx(t) }} style={{ fontSize: '0.7rem', padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: 'pointer' }}>📜 Full history</button>}
+        </div>
         {tracked.length > 0 && (
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 6 }}>
             {tracked.map(t => (
@@ -288,6 +378,39 @@ function InsightsTab({ sessions, profile, measurementHistory }) {
               <span style={{ flex: 1, background: 'var(--bg3)', borderRadius: 8, padding: '6px 8px', color: 'var(--text3)' }}>Low: wk {bw.worst.label} ({(bw.worst.volume/1000).toFixed(1)}k)</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Records / PR board */}
+      {records.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginBottom: 10 }}>🏆 Personal Records</h3>
+          {records.slice(0, 8).map(r => (
+            <div key={r.exerciseId} onClick={() => setDetailEx({ id: r.exerciseId, name: r.name })} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--bg3)', cursor: 'pointer' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>best set {r.bestSet.weight}×{r.bestSet.reps} · {(r.bestVolumeDay.volume/1000).toFixed(1)}k vol day</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 800, color: 'var(--green)', fontSize: '0.95rem' }}>{r.best1RM.value}{u}</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text3)' }}>est 1RM</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* PR feed */}
+      {feed.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginBottom: 10 }}>📈 Recent PRs</h3>
+          {feed.slice(0, 8).map((f, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+              <span>{f.first ? '🆕' : '⬆️'}</span>
+              <div style={{ flex: 1, fontSize: '0.8125rem' }}>{f.name} <span style={{ color: 'var(--green)', fontWeight: 700 }}>{f.e1rm}{u}</span>{f.delta ? <span style={{ color: 'var(--text3)' }}> (+{f.delta})</span> : ' (first log)'}</div>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>{new Date(f.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+            </div>
+          ))}
         </div>
       )}
     </>

@@ -110,6 +110,70 @@ export function gainRate(measurementHistory = [], unit = 'kg') {
   return { totalChange, perWeek, weeks: +(days / 7).toFixed(1), unit, from: first.value, to: last.value }
 }
 
+// ── Personal records across all exercises ────────────────────────────────────
+function exVolume(ex) {
+  return (ex.sets || []).reduce((t, s) => t + (s.warmup ? 0 : (s.weight || 0) * (s.reps || 0)), 0)
+}
+
+export function computePRs(sessions) {
+  const byEx = {}   // exerciseId -> record
+  const feed = []   // chronological new-1RM-PR events
+  const running = {} // exerciseId -> best e1rm so far (for feed)
+
+  ;[...sessions].sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(s => {
+    (s.exercises || []).forEach(ex => {
+      const rec = byEx[ex.exerciseId] || (byEx[ex.exerciseId] = {
+        exerciseId: ex.exerciseId, name: ex.name,
+        best1RM: { value: 0, date: null },
+        bestSet: { weight: 0, reps: 0, date: null },
+        bestVolumeDay: { volume: 0, date: null },
+      })
+      const e = bestE1RM(ex.sets)
+      if (e > rec.best1RM.value) rec.best1RM = { value: e, date: s.date }
+      // best single working set by weight (tiebreak reps)
+      ;(ex.sets || []).forEach(set => {
+        if (set.warmup || !set.weight || !set.reps) return
+        if (set.weight > rec.bestSet.weight || (set.weight === rec.bestSet.weight && set.reps > rec.bestSet.reps)) {
+          rec.bestSet = { weight: set.weight, reps: set.reps, date: s.date }
+        }
+      })
+      const vol = exVolume(ex)
+      if (vol > rec.bestVolumeDay.volume) rec.bestVolumeDay = { volume: Math.round(vol), date: s.date }
+      // feed: new all-time e1rm
+      if (e > 0 && e > (running[ex.exerciseId] || 0) + 0.5) {
+        const prev = running[ex.exerciseId] || 0
+        feed.push({ date: s.date, name: ex.name, exerciseId: ex.exerciseId, e1rm: e, delta: prev ? +(e - prev).toFixed(1) : null, first: !prev })
+        running[ex.exerciseId] = e
+      }
+    })
+  })
+
+  const records = Object.values(byEx).sort((a, b) => b.best1RM.value - a.best1RM.value)
+  feed.reverse() // newest first
+  return { records, feed }
+}
+
+// ── Per-exercise drill-down ───────────────────────────────────────────────────
+export function exerciseDetail(sessions, exerciseId) {
+  const rows = []
+  ;[...sessions].sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(s => {
+    const ex = s.exercises?.find(e => e.exerciseId === exerciseId)
+    if (!ex) return
+    const working = (ex.sets || []).filter(st => !st.warmup && st.weight > 0 && st.reps > 0)
+    if (!working.length) return
+    const top = working.reduce((m, st) => (st.weight > m.weight ? st : m), working[0])
+    rows.push({
+      date: s.date,
+      name: ex.name,
+      sets: working.length,
+      topSet: { weight: top.weight, reps: top.reps },
+      volume: Math.round(exVolume(ex)),
+      e1rm: bestE1RM(ex.sets),
+    })
+  })
+  return rows
+}
+
 // ── Strength projection — linear fit over an e1RM trend ───────────────────────
 export function projectStrength(trend, weeksAhead = 8) {
   if (!trend || trend.length < 3) return null
