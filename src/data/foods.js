@@ -5,6 +5,7 @@
 
 export const FOOD_CATEGORIES = {
   protein:    { label: 'Proteins',       emoji: '🥩' },
+  habesha:    { label: 'Habesha Food',   emoji: '🇪🇷' },
   carb:       { label: 'Grains & Carbs', emoji: '🌾' },
   fruit:      { label: 'Fruits',         emoji: '🍎' },
   vegetable:  { label: 'Vegetables',     emoji: '🥦' },
@@ -22,6 +23,12 @@ function food(id, name, brand, category, emoji, servingG, kcal, protein, carbs, 
     per100g: { kcal, protein, carbs, fat, fiber },
     tags,
   }
+}
+
+// Household-portion helper — adds rough real-world measures (great for home-cooked
+// & ethnic dishes you don't weigh). portions = [{ label, grams }]
+function withPortions(foodObj, portions) {
+  return { ...foodObj, portions, serving: { amount: portions[0].grams, unit: 'g', label: portions[0].label } }
 }
 
 // ─── PROTEINS ────────────────────────────────────────────────────────────────
@@ -344,8 +351,73 @@ const DRINKS = [
   { ...food('red_wine',       'Red Wine',                   null, 'drink', '🍷', 150,  85, 0.1,  2.7, 0.0, 0.0, []), serving: { amount: 150, unit: 'ml', label: '150ml' } },
 ]
 
+// ─── CANNED FISH, ORGAN MEATS & EXTRA WHOLE FOODS ────────────────────────────
+const WHOLE_FOODS_EXTRA = [
+  withPortions(food('sardines_oil',   'Sardines (canned in oil, drained)', null, 'protein', '🐟', 90, 208, 25.0, 0.0, 11.0, 0.0, ['high-protein','whole-food','omega-3','calcium','complete']),
+    [{ label: '1 can (drained)', grams: 90 }, { label: '½ can', grams: 45 }, { label: '100g', grams: 100 }]),
+  withPortions(food('sardines_water', 'Sardines (canned in water)',        null, 'protein', '🐟', 90, 160, 25.0, 0.0,  7.0, 0.0, ['high-protein','lean','whole-food','omega-3','calcium','complete']),
+    [{ label: '1 can (drained)', grams: 90 }, { label: '½ can', grams: 45 }, { label: '100g', grams: 100 }]),
+  withPortions(food('mackerel_canned','Mackerel (canned)',                 null, 'protein', '🐟', 100, 262, 24.0, 0.0, 18.0, 0.0, ['high-protein','whole-food','omega-3','complete']),
+    [{ label: '1 can', grams: 100 }, { label: '½ can', grams: 50 }]),
+  withPortions(food('anchovies',      'Anchovies (canned)',                null, 'protein', '🐟', 30, 210, 29.0, 0.0, 10.0, 0.0, ['high-protein','omega-3','complete']),
+    [{ label: '1 tin', grams: 45 }, { label: '5 fillets', grams: 20 }]),
+  food('mussels',        'Mussels (cooked)',          null, 'protein', '🦪', 100, 172, 24.0,  7.0,  4.5, 0.0, ['high-protein','omega-3','b12','iron']),
+  food('beef_liver',     'Beef Liver (cooked)',       null, 'protein', '🥩', 100, 175, 27.0,  5.0,  5.0, 0.0, ['high-protein','iron','b12','whole-food','complete']),
+  food('chicken_liver',  'Chicken Liver (cooked)',    null, 'protein', '🍗', 100, 167, 24.0,  1.0,  6.0, 0.0, ['high-protein','iron','b12','complete']),
+  food('beef_heart',     'Beef Heart (cooked)',       null, 'protein', '🫀', 100, 165, 28.0,  0.2,  5.0, 0.0, ['high-protein','iron','b12','lean','complete']),
+  food('cottage_2',      'Cottage Cheese (2%)',       null, 'dairy',   '🧀', 100,  84, 11.0,  4.3,  2.3, 0.0, ['high-protein','calcium','complete']),
+  withPortions(food('kefir', 'Kefir (plain)',         null, 'dairy',   '🥛', 240,  65,  3.8,  4.8,  3.5, 0.0, ['calcium','probiotic']),
+    [{ label: '1 cup', grams: 240 }, { label: '½ cup', grams: 120 }]),
+  food('eggs_boiled',    'Boiled Egg',               null, 'protein', '🥚',  50, 155, 13.0,  1.1, 11.0, 0.0, ['high-protein','whole-food','complete']),
+]
+
+// ─── HABESHA (ERITREAN / ETHIOPIAN) ──────────────────────────────────────────
+// Macros per 100g; portions use rough household measures (ladle, scoop, piece).
+const HABESHA = [
+  withPortions(food('injera',        'Injera (teff flatbread)',          null, 'habesha', '🫓', 120, 130,  3.8, 26.0, 0.7, 3.0, ['whole-food']),
+    [{ label: '1 large piece', grams: 120 }, { label: '1 small piece', grams: 70 }, { label: '½ piece', grams: 60 }]),
+  withPortions(food('injera_white',  'Injera (teff + wheat mix)',        null, 'habesha', '🫓', 120, 165,  4.0, 33.0, 0.9, 2.0, []),
+    [{ label: '1 large piece', grams: 120 }, { label: '1 small piece', grams: 70 }]),
+  withPortions(food('doro_wat',      'Doro Wat (spicy chicken stew)',    null, 'habesha', '🍲', 150, 150, 11.0,  6.0, 9.0, 1.5, ['high-protein','complete']),
+    [{ label: '1 ladle', grams: 150 }, { label: '1 small scoop', grams: 80 }, { label: 'large portion', grams: 220 }]),
+  withPortions(food('zigni',         'Zigni / Tsebhi (beef berbere stew)',null,'habesha', '🍲', 150, 180, 14.0,  5.0, 11.0, 1.0, ['high-protein','complete']),
+    [{ label: '1 ladle', grams: 150 }, { label: '1 small scoop', grams: 80 }, { label: 'large portion', grams: 220 }]),
+  withPortions(food('shiro',         'Shiro (spiced chickpea stew)',     null, 'habesha', '🥘', 150, 150,  6.0, 14.0, 8.0, 4.0, ['vegan','whole-food']),
+    [{ label: '1 ladle', grams: 150 }, { label: '1 small scoop', grams: 80 }]),
+  withPortions(food('misir_wat',     'Misir Wat (red lentil stew)',      null, 'habesha', '🥘', 150, 120,  6.0, 16.0, 4.0, 5.0, ['vegan','whole-food']),
+    [{ label: '1 ladle', grams: 150 }, { label: '1 small scoop', grams: 80 }]),
+  withPortions(food('tibs',          'Tibs (sautéed beef/lamb)',         null, 'habesha', '🍖', 180, 210, 20.0,  2.0, 14.0, 0.5, ['high-protein','complete']),
+    [{ label: 'plate portion', grams: 180 }, { label: 'small portion', grams: 110 }]),
+  withPortions(food('kitfo',         'Kitfo (minced beef + niter kibbeh)',null,'habesha', '🥩', 150, 250, 18.0,  0.5, 20.0, 0.0, ['high-protein','complete']),
+    [{ label: '1 portion', grams: 150 }, { label: 'small portion', grams: 90 }]),
+  withPortions(food('gomen',         'Gomen (collard greens)',           null, 'habesha', '🥬', 120,  75,  3.0,  7.0, 4.0, 3.0, ['vegan']),
+    [{ label: '1 scoop', grams: 120 }, { label: 'small scoop', grams: 70 }]),
+  withPortions(food('atakilt',       'Atakilt Wat (cabbage/carrot/potato)',null,'habesha','🥕', 150,  90,  2.0, 11.0, 5.0, 3.0, ['vegan']),
+    [{ label: '1 scoop', grams: 150 }, { label: 'small scoop', grams: 80 }]),
+  withPortions(food('ful',           'Ful (stewed fava beans)',          null, 'habesha', '🫘', 200, 110,  6.0, 15.0, 3.0, 5.0, ['vegan','whole-food']),
+    [{ label: '1 bowl', grams: 200 }, { label: '½ bowl', grams: 100 }]),
+  withPortions(food('firfir',        'Fir-fir (shredded injera in sauce)',null,'habesha', '🍲', 200, 180,  5.0, 28.0, 6.0, 2.5, []),
+    [{ label: '1 plate', grams: 200 }, { label: 'small plate', grams: 120 }]),
+  withPortions(food('hilbet',        'Hilbet (fenugreek/lentil paste)',  null, 'habesha', '🥣', 100, 130,  7.0, 14.0, 5.0, 5.0, ['vegan']),
+    [{ label: '1 scoop', grams: 100 }, { label: 'small scoop', grams: 60 }]),
+  withPortions(food('alicha',        'Alicha (mild veg/meat stew)',      null, 'habesha', '🥘', 150, 130,  7.0,  9.0, 7.0, 2.0, []),
+    [{ label: '1 ladle', grams: 150 }, { label: 'small scoop', grams: 80 }]),
+  withPortions(food('sambusa',       'Sambusa (fried lentil/meat pastry)',null,'habesha', '🥟', 50, 300,  8.0, 30.0, 16.0, 2.0, []),
+    [{ label: '1 piece', grams: 50 }, { label: '2 pieces', grams: 100 }]),
+  withPortions(food('dabo',          'Dabo (Habesha bread)',             null, 'habesha', '🍞', 80, 270,  8.0, 50.0, 4.0, 2.0, []),
+    [{ label: '1 thick slice', grams: 80 }, { label: '1 thin slice', grams: 45 }]),
+  withPortions(food('genfo',         'Genfo (barley porridge)',          null, 'habesha', '🥣', 200, 150,  4.0, 28.0, 3.0, 3.0, []),
+    [{ label: '1 bowl', grams: 200 }, { label: '½ bowl', grams: 100 }]),
+  withPortions(food('niter_kibbeh',  'Niter Kibbeh (spiced butter)',     null, 'habesha', '🧈', 14, 900,  0.5,  0.0, 99.0, 0.0, []),
+    [{ label: '1 tbsp', grams: 14 }, { label: '1 tsp', grams: 5 }]),
+  withPortions(food('berbere',       'Berbere spice',                    null, 'habesha', '🌶️', 8, 300, 12.0, 50.0, 8.0, 25.0, []),
+    [{ label: '1 tbsp', grams: 8 }, { label: '1 tsp', grams: 3 }]),
+]
+
 export const FOODS = [
   ...PROTEINS,
+  ...WHOLE_FOODS_EXTRA,
+  ...HABESHA,
   ...CARBS,
   ...FRUITS,
   ...VEGETABLES,
@@ -395,4 +467,35 @@ export function getFoodMacros(food, grams) {
     fat:     +(food.per100g.fat     * ratio).toFixed(1),
     fiber:   +(food.per100g.fiber   * ratio).toFixed(1),
   }
+}
+
+// ─── Labeling / quality helpers ──────────────────────────────────────────────
+// Protein density = grams of protein per 100 kcal. >10 = excellent, 5–10 = good.
+export function proteinDensity(food) {
+  if (!food.per100g.kcal) return 0
+  return +(food.per100g.protein / food.per100g.kcal * 100).toFixed(1)
+}
+
+export function proteinQualityLabel(food) {
+  const d = proteinDensity(food)
+  if (food.per100g.protein < 5) return null
+  if (d >= 12) return { label: 'Elite protein', color: 'var(--green)' }
+  if (d >= 7)  return { label: 'High protein',  color: 'var(--green)' }
+  if (d >= 4)  return { label: 'Good protein',  color: 'var(--yellow)' }
+  return null
+}
+
+// Micronutrient / quality chips inferred from tags
+const NUTRIENT_CHIPS = {
+  'omega-3':  { label: 'Omega-3', emoji: '🐟' },
+  'iron':     { label: 'Iron',    emoji: '🩸' },
+  'b12':      { label: 'B12',     emoji: '⚡' },
+  'calcium':  { label: 'Calcium', emoji: '🦴' },
+  'complete': { label: 'Complete protein', emoji: '✅' },
+  'probiotic':{ label: 'Probiotic', emoji: '🦠' },
+  'whole-food': { label: 'Whole food', emoji: '🌿' },
+  'lean':     { label: 'Lean',    emoji: '🍃' },
+}
+export function nutrientChips(food) {
+  return (food.tags || []).filter(t => NUTRIENT_CHIPS[t]).map(t => NUTRIENT_CHIPS[t])
 }

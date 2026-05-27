@@ -315,3 +315,57 @@ export function macroRemaining(targets, consumed) {
     fat:     Math.max(0, targets.fat     - consumed.fat),
   }
 }
+
+// ─── MACRO COACHING ───────────────────────────────────────────────────────────
+// Generates a coach-style message + priority based on what's left in the budget.
+export function getMacroCoaching(targets, consumed) {
+  const rem = {
+    kcal:    targets.kcal    - consumed.kcal,
+    protein: targets.protein - consumed.protein,
+    carbs:   targets.carbs   - consumed.carbs,
+    fat:     targets.fat     - consumed.fat,
+  }
+  const proteinPct = targets.protein ? consumed.protein / targets.protein : 0
+  const kcalPct    = targets.kcal    ? consumed.kcal    / targets.kcal    : 0
+
+  // Over budget
+  if (rem.kcal < -100) {
+    return { tone: 'warn', priority: null,
+      message: `You're ${Math.abs(Math.round(rem.kcal))} kcal over budget today. If you're bulking that's fine — if cutting, ease off or add a walk.` }
+  }
+
+  // Day essentially done
+  if (kcalPct >= 0.92 && proteinPct >= 0.9) {
+    return { tone: 'good', priority: null,
+      message: `Dialed in — ${Math.round(consumed.protein)}g protein and ${Math.round(consumed.kcal)} kcal. Great day. 💪` }
+  }
+
+  // Protein lagging (most important driver of muscle gain)
+  if (rem.protein > 25 && proteinPct < 0.7) {
+    const proteinKcal = Math.round(rem.protein * 4)
+    const fitsInBudget = rem.kcal >= proteinKcal
+    return { tone: 'focus', priority: 'protein',
+      message: `You're ${Math.round(rem.protein)}g protein short with ${Math.round(rem.kcal)} kcal left. ${
+        fitsInBudget
+          ? 'Prioritize lean, protein-dense foods (chicken, sardines, Greek yogurt, whey).'
+          : 'Tight on calories — go very lean: egg whites, white fish, non-fat Greek yogurt, or a whey shake.'
+      }` }
+  }
+
+  // Lots of calories left, protein ok
+  if (rem.kcal > 400 && proteinPct >= 0.7) {
+    return { tone: 'focus', priority: rem.carbs > rem.fat ? 'carbs' : 'fat',
+      message: `Protein's on track. You have ${Math.round(rem.kcal)} kcal left — fill it with ${
+        rem.carbs > rem.fat ? 'carbs to fuel training (rice, oats, fruit, injera).' : 'healthy fats (avocado, nuts, olive oil).'
+      }` }
+  }
+
+  // Close to done, small gap
+  if (rem.kcal > 0 && rem.kcal <= 400) {
+    return { tone: 'focus', priority: rem.protein > 15 ? 'protein' : 'balanced',
+      message: `Almost there — ${Math.round(rem.kcal)} kcal to go${rem.protein > 15 ? `, still need ${Math.round(rem.protein)}g protein.` : '. Finish with a balanced snack.'}` }
+  }
+
+  return { tone: 'neutral', priority: 'balanced',
+    message: `Log your meals to get personalized macro coaching for the rest of the day.` }
+}

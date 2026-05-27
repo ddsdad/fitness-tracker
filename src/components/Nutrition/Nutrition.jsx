@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../../store/useStore.js'
-import { FOODS, FOOD_CATEGORIES, searchFoods, getFoodMacros } from '../../data/foods.js'
+import { FOODS, FOOD_CATEGORIES, searchFoods, getFoodMacros, proteinQualityLabel, nutrientChips } from '../../data/foods.js'
 import {
   calculateTDEE, calculateMacroTargets, getFoodRecommendations,
   generateMealPlan, sumLogMacros, macroRemaining, EXTRA_ACTIVITIES, activityBurn,
+  getMacroCoaching,
 } from '../../utils/nutrition.js'
 import { IconPlus, IconX, IconCheck, IconFlame } from '../shared/Icons.jsx'
 
@@ -100,7 +101,7 @@ function FoodPicker({ meal, onAdd, onClose }) {
           </div>
           <input
             className="input"
-            placeholder="Search 300+ foods (chicken, Big Mac, oats…)"
+            placeholder="Search foods (injera, sardines, doro wat, Big Mac…)"
             value={query}
             onChange={e => { setQuery(e.target.value); setSelected(null) }}
             autoFocus
@@ -128,7 +129,12 @@ function FoodPicker({ meal, onAdd, onClose }) {
                   <div style={{ fontWeight: 600, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {food.emoji} {food.name}
                   </div>
-                  {food.brand && <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>{food.brand} · {food.serving.label}</div>}
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text3)', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 1 }}>
+                    {food.brand && <span>{food.brand}</span>}
+                    <span>{food.serving.label}</span>
+                    {(() => { const q = proteinQualityLabel(food); return q ? <span style={{ color: q.color, fontWeight: 700 }}>· {q.label}</span> : null })()}
+                    {nutrientChips(food).slice(0, 2).map(c => <span key={c.label}>{c.emoji}</span>)}
+                  </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
                   <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{Math.round(food.per100g.kcal * food.serving.amount / 100)} kcal</div>
@@ -142,7 +148,29 @@ function FoodPicker({ meal, onAdd, onClose }) {
         {/* Amount selector (shown when food selected) */}
         {selected && (
           <div style={{ padding: '16px', background: 'var(--bg)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-            <div style={{ fontWeight: 600, marginBottom: 10 }}>{selected.emoji} {selected.name}</div>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>{selected.emoji} {selected.name}</div>
+            {/* Quality + nutrient chips */}
+            {(() => {
+              const q = proteinQualityLabel(selected); const chips = nutrientChips(selected)
+              if (!q && !chips.length) return null
+              return (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {q && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: q.color, background: 'var(--bg3)', padding: '2px 8px', borderRadius: 999 }}>{q.label}</span>}
+                  {chips.map(c => <span key={c.label} style={{ fontSize: '0.7rem', color: 'var(--text2)', background: 'var(--bg3)', padding: '2px 8px', borderRadius: 999 }}>{c.emoji} {c.label}</span>)}
+                </div>
+              )
+            })()}
+            {/* Household portions (if defined) */}
+            {selected.portions?.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                {selected.portions.map(p => (
+                  <button key={p.label} onClick={() => setGrams(String(p.grams))}
+                    style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${grams === String(p.grams) ? 'var(--green)' : 'var(--border)'}`, background: grams === String(p.grams) ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: grams === String(p.grams) ? 'var(--green)' : 'var(--text2)', fontSize: '0.8rem', cursor: 'pointer' }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               {[50, 100, 150, 200].filter(g => g <= (selected.category === 'drink' ? 500 : 400)).map(g => (
                 <button key={g} onClick={() => setGrams(String(g))}
@@ -520,6 +548,22 @@ export default function Nutrition() {
               ))}
             </div>
           </div>
+
+          {/* Macro coaching */}
+          {(() => {
+            const coach = getMacroCoaching(targets, consumed)
+            const toneColor = { good: 'var(--green)', focus: 'var(--blue)', warn: '#f59e0b', neutral: 'var(--text3)' }[coach.tone] || 'var(--text3)'
+            const toneBg    = { good: 'rgba(34,197,94,0.08)', focus: 'rgba(59,130,246,0.08)', warn: 'rgba(245,158,11,0.08)', neutral: 'var(--bg2)' }[coach.tone] || 'var(--bg2)'
+            return (
+              <div style={{ background: toneBg, border: `1px solid ${toneColor}44`, borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '1.125rem', flexShrink: 0 }}>🧠</span>
+                <div>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: toneColor, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Coach</div>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', lineHeight: 1.5 }}>{coach.message}</div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Meal sections */}
           {MEALS.map(meal => (
