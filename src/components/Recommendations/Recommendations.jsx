@@ -528,6 +528,17 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession, weeklyV
     setExtras(e => [...e, { ...sugg, _phase: 'finisher' }])
     setDismissedSugg(true)
   }
+  // One-tap: swap every cable exercise to its best non-cable equivalent
+  const cableCount = allEx.filter(e => e.equipment === 'cable').length
+  const swapOutCables = () => {
+    const next = { ...swaps }
+    allEx.forEach(ex => {
+      if (ex.equipment !== 'cable') return
+      const alt = EXERCISES.find(e => e.primary === ex.primary && e.equipment !== 'cable' && e.id !== ex.id && (!equipTypes || equipTypes.has(e.equipment)))
+      if (alt) next[ex.id] = { ...alt, ...represcribe(alt, repScheme, ex.sets) }
+    })
+    setSwaps(next)
+  }
 
   return (
     <div className="card" style={{ marginBottom: 16, padding: 0, overflow: 'hidden', border: `1px solid ${defaultOpen ? 'var(--green)' : 'var(--border)'}` }}>
@@ -586,6 +597,14 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession, weeklyV
                 🔄 {swapCount} swapped{extras.length > 0 ? ` · ➕ ${extras.length} added` : ''}
                 <button onClick={() => { setSwaps({}); setExtras([]); setLastSwapMuscle(null) }} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: '0.7rem', textDecoration: 'underline', padding: 0 }}>Reset</button>
               </div>
+            )}
+
+            {/* No-cables-today quick swap */}
+            {cableCount > 0 && (
+              <button onClick={swapOutCables}
+                style={{ marginBottom: 8, padding: '6px 12px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', fontSize: '0.75rem', cursor: 'pointer' }}>
+                🚫🔌 No cables today — swap {cableCount} to dumbbell/bodyweight
+              </button>
             )}
 
             {/* Redundancy warning */}
