@@ -7,6 +7,7 @@ import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
 import { getRegion, getEmphasis, weeklyDelta, groupedAlternatives, represcribe, suggestComplementary, analyzeCoverage } from '../../utils/variations.js'
 import { getMuscleVolume } from '../../utils/heatmap.js'
 import { detectTrainingLevel } from '../../utils/milestones.js'
+import Program from '../Program/Program.jsx'
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 function Badge({ children, color = 'var(--green)' }) {
@@ -675,6 +676,7 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession, weeklyV
 export default function Recommendations({ onStartSession }) {
   const { profile, sessions, goals } = useStore()
   const [sessionTypeId, setSessionTypeId] = useState('standard')
+  const [mode, setMode] = useState(profile?.program ? 'program' : 'auto') // 'auto' | 'program'
 
   if (!profile) {
     return (
@@ -706,6 +708,18 @@ export default function Recommendations({ onStartSession }) {
         <p>Smart sessions — adapts to your recovery, goals &amp; time.</p>
       </div>
 
+      {/* Mode toggle: Auto vs 3-Month Program */}
+      <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 20, gap: 2 }}>
+        {[['auto', '⚡ Auto Session'], ['program', '📋 3-Month Program']].map(([id, label]) => (
+          <button key={id} onClick={() => setMode(id)} style={{ flex: 1, padding: '9px', borderRadius: 999, border: 'none', cursor: 'pointer', background: mode === id ? 'var(--bg2)' : 'transparent', color: mode === id ? 'var(--green)' : 'var(--text3)', fontWeight: mode === id ? 700 : 400, fontSize: '0.8125rem', transition: 'all 0.15s' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'program' && <Program onStartSession={onStartSession} />}
+
+      {mode === 'auto' && <>
       {/* Auto-deload banner */}
       {deloadAlerts.length > 0 && (
         <div style={{ marginBottom: 16 }}>
@@ -847,6 +861,7 @@ export default function Recommendations({ onStartSession }) {
           ))}
         </div>
       </div>
+      </>}
     </div>
   )
 }
