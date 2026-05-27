@@ -258,6 +258,16 @@ export function StoreProvider({ children }) {
     setProfile({ ...p, game })
   }, [setProfile])
 
+  // Record the level the user has acknowledged + grant a level-up bonus
+  const markLevelSeen = useCallback((level) => {
+    const p = storage.getProfile(); if (!p) return
+    const game = { ...(p.game || {}) }
+    if ((game.seenLevel || 1) >= level) return
+    game.seenLevel = level
+    game.questCoins = (game.questCoins || 0) + 30   // level-up bonus
+    setProfile({ ...p, game })
+  }, [setProfile])
+
   const useStreakShield = useCallback((dateStr) => {
     const p = storage.getProfile(); if (!p) return false
     const game = { ...(p.game || {}) }
@@ -365,7 +375,7 @@ export function StoreProvider({ children }) {
       customExercises, addCustomExercise,
       routines, addRoutine, deleteRoutine,
       convertAllUnits,
-      completeQuest, equipTheme, buyShopItem, useStreakShield,
+      completeQuest, equipTheme, buyShopItem, useStreakShield, markLevelSeen,
       loaded, resetApp,
       user, syncStatus, signOut,
     }}>

@@ -509,6 +509,28 @@ export function detectFoodPatterns(nutritionLogs = {}) {
   return insights
 }
 
+// ─── PER-MEAL PROTEIN DISTRIBUTION ────────────────────────────────────────────
+// Muscle protein synthesis is maximized by ~0.4 g/kg per meal (leucine threshold).
+// Flags main meals that came in light so protein gets spread across the day.
+export function mealProteinCheck(todayLog, bwKg, mealsMeta) {
+  const target = +(bwKg * 0.4).toFixed(0)   // ideal protein per main meal
+  if (target <= 0) return null
+  const flagged = []
+  for (const meal of mealsMeta) {
+    if (meal.id === 'snacks') continue
+    const entries = todayLog?.meals?.[meal.id] || []
+    if (entries.length === 0) continue          // not eaten yet — don't nag
+    const p = entries.reduce((s, e) => s + (e.macros?.protein || 0), 0)
+    if (p < target * 0.6) flagged.push({ meal: meal.label, protein: Math.round(p) })
+  }
+  if (!flagged.length) return null
+  return {
+    target,
+    flagged,
+    message: `${flagged.map(f => `${f.meal} had ${f.protein}g`).join(', ')} — aim for ~${target}g protein per main meal to maximize muscle protein synthesis.`,
+  }
+}
+
 // ─── ADAPTIVE TDEE ────────────────────────────────────────────────────────────
 // The gold standard: your real maintenance = average intake − energy stored/lost
 // as bodyweight, measured over a rolling window. Falls back to null until there's

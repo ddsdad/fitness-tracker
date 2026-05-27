@@ -5,6 +5,14 @@
 // ════════════════════════════════════════════════════════════════════════════
 import { FOOD_INDEX, getFoodMacros } from '../data/foods.js'
 import { epley1RM } from './calculations.js'
+import { computeAchievements } from './achievements.js'
+
+// Coin value per earned achievement (by id; default 40)
+const ACHIEVEMENT_COINS = {
+  first_workout: 20, ten_sessions: 40, fifty_sessions: 100, hundred_sessions: 250,
+  streak_7: 60, streak_30: 200, bench_bw: 75, squat_1_5: 100, deadlift_2: 120,
+  pr_machine: 50, volume_week: 80, protein_streak: 50,
+}
 
 // ── Level curve & titles ──────────────────────────────────────────────────────
 export function levelFromXp(xp) { return Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1 }
@@ -81,7 +89,12 @@ export function deriveEarned(profile, sessions = [], measurementHistory = [], nu
   const volUnit = profile?.unit === 'lbs' ? totalVolume / 2.2046 : totalVolume
   bd.volume = Math.floor(volUnit / 50000) * 50
 
-  coins = bd.workouts + bd.prs + bd.milestones + bd.protein + bd.weighins + bd.volume
+  // Achievement bounties (ties the badge system to the economy)
+  bd.achievements = computeAchievements({ sessions, profile, measurementHistory, nutritionLogs })
+    .filter(a => a.earned)
+    .reduce((s, a) => s + (ACHIEVEMENT_COINS[a.id] || 40), 0)
+
+  coins = bd.workouts + bd.prs + bd.milestones + bd.protein + bd.weighins + bd.volume + bd.achievements
   return { coins: Math.round(coins), breakdown: bd }
 }
 

@@ -6,7 +6,7 @@ import {
   calculateTDEE, calculateMacroTargets, getFoodRecommendations,
   generateMealPlan, sumLogMacros, macroRemaining, EXTRA_ACTIVITIES, activityBurn,
   getMacroCoaching, getSmartPicks, findClosestFoods, detectFoodPatterns, calorieCalibration, DIET_OPTIONS,
-  adaptiveTDEE, effectiveTDEE,
+  adaptiveTDEE, effectiveTDEE, mealProteinCheck,
 } from '../../utils/nutrition.js'
 import { IconPlus, IconX, IconCheck, IconFlame } from '../shared/Icons.jsx'
 
@@ -797,6 +797,7 @@ export default function Nutrition() {
   }, [nutritionLogs])
 
   const patterns    = useMemo(() => detectFoodPatterns(nutritionLogs), [nutritionLogs])
+  const mealProtein = mealProteinCheck(todayLog, bwKg, MEALS)
   const calibration = useMemo(() => calorieCalibration(measurementHistory, targets, profile.caloricMode || 'lean_bulk', profile.unit), [measurementHistory, targets.kcal, profile.caloricMode])
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -922,6 +923,14 @@ export default function Nutrition() {
                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', marginBottom: 3 }}>Auto-Calibration</div>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', lineHeight: 1.5 }}>{calibration.message}</div>
               </div>
+            </div>
+          )}
+
+          {/* Per-meal protein distribution */}
+          {mealProtein && (
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 10, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span>🍗</span>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text2)', lineHeight: 1.5 }}>{mealProtein.message}</div>
             </div>
           )}
 

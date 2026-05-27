@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useStore } from '../../store/useStore.js'
 import { getProgramStatus, SPLIT_META, splitVariant, generateProgramWorkout } from '../../utils/program.js'
 import { calculateTDEE, calculateMacroTargets, sumLogMacros, adaptiveTDEE, effectiveTDEE } from '../../utils/nutrition.js'
@@ -37,7 +37,8 @@ function Ring({ pct, color, size = 64, children }) {
 }
 
 export default function Today({ onNavigate, onStartSession, embedded = false }) {
-  const { profile, sessions, nutritionLogs, measurementHistory, completeQuest, useStreakShield } = useStore()
+  const { profile, sessions, nutritionLogs, measurementHistory, completeQuest, useStreakShield, markLevelSeen } = useStore()
+  const [levelUp, setLevelUp] = useState(null)
 
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening' })()
   const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -76,8 +77,26 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
   const quests = dailyQuests(TODAY, readiness?.score)
   const questDone = profile?.game?.questLog?.[TODAY] || []
 
+  // Detect level-up → celebrate + grant bonus (once)
+  const seenLevel = profile?.game?.seenLevel || 1
+  useEffect(() => {
+    if (game.level > seenLevel) { setLevelUp(game.level); markLevelSeen(game.level) }
+  }, [game.level, seenLevel, markLevelSeen])
+
   const body = (
     <>
+      {/* ── Level-up celebration ── */}
+      {levelUp && (
+        <div onClick={() => setLevelUp(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: '4rem', marginBottom: 12, animation: 'fadeIn 0.4s' }}>{game.title.emoji}</div>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--green)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Level Up!</div>
+          <h1 style={{ margin: '8px 0' }}>Level {levelUp} · {game.title.title}</h1>
+          <p style={{ color: 'var(--text2)', maxWidth: 320, marginBottom: 8 }}>You've put in the work. Keep stacking PRs and streaks to keep climbing.</p>
+          <div style={{ display: 'inline-block', background: 'rgba(34,197,94,0.12)', border: '1px solid var(--green)', borderRadius: 999, padding: '6px 16px', marginBottom: 24, fontWeight: 800, color: 'var(--green)' }}>+30 🪙 bonus</div>
+          <button className="btn btn-primary" style={{ minWidth: 200 }} onClick={() => setLevelUp(null)}>Let's go 💪</button>
+        </div>
+      )}
+
       {/* ── Level / coins banner ── */}
       <div className="card" style={{ marginBottom: 16, background: 'linear-gradient(135deg, rgba(34,197,94,0.12), var(--bg2))' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
