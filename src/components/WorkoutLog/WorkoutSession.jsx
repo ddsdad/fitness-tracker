@@ -409,7 +409,7 @@ function SessionSummary({ exercises }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function WorkoutSession({ mode, session: initialSession, onDone, initialExercises }) {
-  const { addSession, deleteSession, sessions, profile, setProfile } = useStore()
+  const { addSession, deleteSession, updateSession, sessions, profile, setProfile } = useStore()
 
   // Build initial exercises from either a pre-loaded plan or an existing session
   const buildInitialExercises = () => {
@@ -524,9 +524,19 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
         {isView ? (
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>{initialSession?.name || 'Workout'}</div>
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text2)' }}>
-              {new Date(initialSession?.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-            </div>
+            <input
+              type="date"
+              value={new Date(initialSession?.date).toLocaleDateString('en-CA')}
+              max={new Date().toLocaleDateString('en-CA')}
+              onChange={e => {
+                if (!e.target.value || !initialSession) return
+                // keep time-of-day at noon to avoid timezone date rollover
+                const newDate = new Date(`${e.target.value}T12:00:00`).toISOString()
+                updateSession(initialSession.id, { date: newDate })
+                initialSession.date = newDate
+              }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text2)', fontSize: '0.8125rem', padding: 0, cursor: 'pointer', colorScheme: 'dark' }}
+            />
           </div>
         ) : (
           <input

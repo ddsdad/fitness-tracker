@@ -490,20 +490,31 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession, weeklyV
 
   const repScheme = SESSION_TYPES[sessionTypeId]?.repScheme || 'hypertrophy'
 
-  // Apply swaps to a variant (replacement carries its own represcribed sets/reps/rest/rir)
+  // Multi-select available equipment (defaults to everything)
+  const [equipSel, setEquipSel] = useState(() => new Set(['barbell','dumbbell','machine','cable','bodyweight']))
+  const toggleEquip = (t) => setEquipSel(prev => { const n = new Set(prev); n.has(t) ? n.delete(t) : n.add(t); if (n.size === 0) n.add(t); return n })
+  const equipTypes = equipSel
+
+  // Fit an exercise to the selected kit — keep if allowed, else best allowed same-muscle alt
+  const fitEquipment = (ex) => {
+    if (equipSel.has(ex.equipment)) return ex
+    const alt = EXERCISES.find(e => e.primary === ex.primary && equipSel.has(e.equipment) && e.id !== ex.id)
+    return alt ? { ...alt, ...represcribe(alt, repScheme, ex.sets), _phase: ex._phase } : ex
+  }
+
+  // Apply manual swaps first, then auto-fit anything outside the selected equipment
   const applySwaps = (v) => {
     if (!v) return v
-    const mapEx = ex => (swaps[ex.id] ? { ...swaps[ex.id], _phase: ex._phase } : ex)
+    const mapEx = ex => (swaps[ex.id] ? { ...swaps[ex.id], _phase: ex._phase } : fitEquipment(ex))
     return {
       ...v,
-      solo: [...(v.solo?.map(mapEx) || []), ...extras],
+      solo: [...(v.solo?.map(mapEx) || []), ...extras.map(fitEquipment)],
       pairs: v.pairs?.map(p => ({ ...p, exercises: p.exercises.map(mapEx) })) || [],
     }
   }
 
-  const rawVariant   = plan.variants[equipIdx]
+  const rawVariant   = plan.variants[0] || plan.variants[equipIdx]
   const variant      = applySwaps(rawVariant)
-  const equipTypes   = EQUIPMENT_PROFILES[equipIdx]?.types
   const hasEx        = variant && (variant.solo?.length > 0 || variant.pairs?.length > 0)
   const prioColor    = PRIORITY_COLOR[plan.priority] || 'var(--text3)'
   const summary      = hasEx ? calcSummary(variant, plan.warmup || [], SESSION_TYPES[sessionTypeId] || {}) : []
@@ -563,22 +574,21 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession, weeklyV
           {/* Reasoning */}
           {plan.reasoning?.length > 0 && <ReasoningPanel reasoning={plan.reasoning} />}
 
-          {/* Equipment selector */}
-          <div style={{ padding: '10px 16px 10px', borderBottom: '1px solid var(--bg4)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {EQUIPMENT_PROFILES.map((ep, i) => (
-              <button
-                key={ep.id}
-                onClick={e => { e.stopPropagation(); setEquipIdx(i) }}
-                style={{
-                  padding: '5px 12px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: '0.8125rem',
-                  background: equipIdx === i ? 'var(--green)' : 'var(--bg3)',
-                  color: equipIdx === i ? '#000' : 'var(--text2)',
-                  fontWeight: equipIdx === i ? 700 : 400, transition: 'all 0.12s',
-                }}
-              >
-                {ep.emoji} {ep.label}
-              </button>
-            ))}
+          {/* Equipment selector (multi-select) */}
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--bg4)' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginBottom: 6 }}>Equipment available today — tap to toggle</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {['barbell','dumbbell','machine','cable','bodyweight'].map(t => {
+                const on = equipSel.has(t)
+                return (
+                  <button key={t} onClick={e => { e.stopPropagation(); toggleEquip(t) }}
+                    style={{ padding: '5px 12px', borderRadius: 999, border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`, cursor: 'pointer', fontSize: '0.8125rem',
+                      background: on ? 'var(--green)' : 'var(--bg3)', color: on ? '#000' : 'var(--text2)', fontWeight: on ? 700 : 400, transition: 'all 0.12s' }}>
+                    {EQUIPMENT_EMOJI[t]} {EQUIPMENT_LABELS[t]}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Muscles chips */}
