@@ -4,6 +4,9 @@ import { getRecommendations, getWeeklyChallengeData, detectDeloadNeed, SESSION_T
 import { MUSCLE_GROUPS } from '../../data/muscles.js'
 import { EXERCISES, EQUIPMENT_EMOJI, EQUIPMENT_LABELS } from '../../data/exercises.js'
 import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
+import { getRegion, getEmphasis, weeklyDelta, groupedAlternatives, represcribe, suggestComplementary, analyzeCoverage } from '../../utils/variations.js'
+import { getMuscleVolume } from '../../utils/heatmap.js'
+import { detectTrainingLevel } from '../../utils/milestones.js'
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 function Badge({ children, color = 'var(--green)' }) {
@@ -20,34 +23,47 @@ const PRIORITY_COLOR = { 'Best Match': 'var(--green)', 'Variation': 'var(--yello
 
 // ── Session type picker ───────────────────────────────────────────────────────
 function SessionTypePicker({ selected, onChange }) {
+  const sel = SESSION_TYPES[selected]
   return (
-    <div style={{ overflowX: 'auto', marginBottom: 20, paddingBottom: 4 }}>
-      <div style={{ display: 'flex', gap: 8, minWidth: 'max-content' }}>
-        {Object.values(SESSION_TYPES).map(st => {
-          const active = selected === st.id
-          return (
-            <button
-              key={st.id}
-              onClick={() => onChange(st.id)}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                gap: 4, padding: '10px 16px', borderRadius: 12,
-                border: `2px solid ${active ? 'var(--green)' : 'var(--border)'}`,
-                background: active ? 'rgba(34,197,94,0.10)' : 'var(--bg2)',
-                cursor: 'pointer', minWidth: 88, transition: 'all 0.15s',
-              }}
-            >
-              <span style={{ fontSize: '1.375rem' }}>{st.emoji}</span>
-              <span style={{ fontWeight: active ? 700 : 500, fontSize: '0.8125rem', color: active ? 'var(--green)' : 'var(--text2)' }}>
-                {st.label}
-              </span>
-              <span style={{ fontSize: '0.625rem', color: 'var(--text3)', textAlign: 'center', lineHeight: 1.3 }}>
-                ~{st.targetMins} min
-              </span>
-            </button>
-          )
-        })}
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 8, minWidth: 'max-content' }}>
+          {Object.values(SESSION_TYPES).map(st => {
+            const active = selected === st.id
+            return (
+              <button
+                key={st.id}
+                onClick={() => onChange(st.id)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  gap: 3, padding: '10px 14px', borderRadius: 12,
+                  border: `2px solid ${active ? 'var(--green)' : 'var(--border)'}`,
+                  background: active ? 'rgba(34,197,94,0.10)' : 'var(--bg2)',
+                  cursor: 'pointer', minWidth: 96, transition: 'all 0.15s',
+                }}
+              >
+                <span style={{ fontSize: '1.375rem' }}>{st.emoji}</span>
+                <span style={{ fontWeight: active ? 700 : 500, fontSize: '0.8125rem', color: active ? 'var(--green)' : 'var(--text2)' }}>
+                  {st.label}
+                </span>
+                <span style={{ fontSize: '0.625rem', color: 'var(--text3)', textAlign: 'center', lineHeight: 1.3 }}>
+                  {st.repRange}
+                </span>
+                <span style={{ fontSize: '0.6rem', color: active ? 'var(--green)' : 'var(--text3)', textAlign: 'center' }}>
+                  ~{st.targetMins} min
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
+      {/* Best-for explainer for the selected type */}
+      {sel && (
+        <div style={{ marginTop: 10, fontSize: '0.8125rem', color: 'var(--text2)', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <span style={{ flexShrink: 0 }}>{sel.emoji}</span>
+          <span><strong style={{ color: 'var(--text)' }}>{sel.goalLabel} · {sel.repRange}</strong> — best for {sel.bestFor.toLowerCase()}. {sel.desc}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -127,50 +143,91 @@ function WeeklyChallenge({ sessions, goals, goalId }) {
 }
 
 // ── Exercise Swap Modal ───────────────────────────────────────────────────────
-function SwapModal({ ex, equipmentTypes, onSwap, onClose }) {
-  const alternatives = useMemo(() => {
-    return EXERCISES
-      .filter(e =>
-        e.id !== ex.id &&
-        e.primary === ex.primary &&
-        (!equipmentTypes || equipmentTypes.has(e.equipment))
-      )
-      .sort((a, b) => (a.category === ex.category ? -1 : 1))  // same category first
-  }, [ex.id, ex.primary, equipmentTypes])
+// Compact weekly-volume delta line, e.g. "Upper chest +2 · Triceps −0.5"
+function DeltaLine({ oldEx, newEx, sets }) {
+  const deltas = weeklyDelta(oldEx, newEx, sets)
+  if (!deltas.length) return <span style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>Same muscle balance</span>
+  return (
+    <span style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>
+      {deltas.slice(0, 3).map((d, i) => (
+        <span key={d.muscle}>
+          {i > 0 && ' · '}
+          {d.label} <span style={{ color: d.delta > 0 ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>{d.delta > 0 ? '+' : ''}{d.delta}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function AltRow({ alt, ex, repScheme, onPick }) {
+  const presc = represcribe(alt, repScheme, ex.sets)
+  return (
+    <div onClick={() => onPick(alt, presc)}
+      style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--bg3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {alt.name}
+            <span style={{ fontSize: '0.625rem', padding: '1px 7px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: 'var(--blue)', fontWeight: 700 }}>{getRegion(alt)}</span>
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 3 }}>
+            {EQUIPMENT_EMOJI[alt.equipment]} {EQUIPMENT_LABELS[alt.equipment]} · {alt.category} · {presc.sets}×{presc.reps}
+          </div>
+          <div style={{ marginTop: 4 }}><DeltaLine oldEx={ex} newEx={alt} sets={ex.sets || presc.sets} /></div>
+          {alt.notes && <div style={{ fontSize: '0.7rem', color: 'var(--text2)', fontStyle: 'italic', marginTop: 4 }}>💡 {alt.notes}</div>}
+        </div>
+        <span style={{ color: 'var(--green)', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>Swap →</span>
+      </div>
+    </div>
+  )
+}
+
+function SwapModal({ ex, equipmentTypes, repScheme, userLevel, onSwap, onClose }) {
+  const { region, sameRegion, diffRegion } = useMemo(
+    () => groupedAlternatives(ex, equipmentTypes, userLevel),
+    [ex.id, ex.primary, equipmentTypes, userLevel]
+  )
+  const pick = (alt, presc) => { onSwap(alt, presc); onClose() }
+  const empty = sameRegion.length === 0 && diffRegion.length === 0
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 400, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: 'var(--bg2)', flex: 1, display: 'flex', flexDirection: 'column', maxHeight: '80vh', marginTop: 'auto', borderRadius: 'var(--radius) var(--radius) 0 0' }}>
+      <div style={{ background: 'var(--bg2)', flex: 1, display: 'flex', flexDirection: 'column', maxHeight: '85vh', marginTop: 'auto', borderRadius: 'var(--radius) var(--radius) 0 0' }}>
         <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ fontWeight: 700 }}>Swap Exercise</div>
               <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginTop: 2 }}>
-                Replace <em>{ex.name}</em> — same muscle: {MUSCLE_GROUPS[ex.primary]?.label}
+                Replacing <em>{ex.name}</em> · <span style={{ color: 'var(--blue)' }}>{region}</span>
               </div>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-          {alternatives.length === 0 ? (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {empty ? (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
-              No alternatives for this equipment. Try switching to Full Gym mode.
+              No alternatives for this equipment. Try Full Gym mode.
             </div>
           ) : (
-            alternatives.map(alt => (
-              <div key={alt.id} onClick={() => { onSwap(alt); onClose() }}
-                style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--bg3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{alt.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text3)', marginTop: 2 }}>
-                    {EQUIPMENT_EMOJI[alt.equipment]} {EQUIPMENT_LABELS[alt.equipment]} · {alt.category}
-                    {alt.notes && ` · ${alt.notes}`}
+            <>
+              {sameRegion.length > 0 && (
+                <>
+                  <div style={{ padding: '12px 16px 6px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Same emphasis · {region}
                   </div>
-                </div>
-                <span style={{ color: 'var(--green)', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0, marginLeft: 12 }}>Swap →</span>
-              </div>
-            ))
+                  {sameRegion.map(alt => <AltRow key={alt.id} alt={alt} ex={ex} repScheme={repScheme} onPick={pick} />)}
+                </>
+              )}
+              {diffRegion.length > 0 && (
+                <>
+                  <div style={{ padding: '14px 16px 6px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--yellow)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Different emphasis · shifts your muscle balance
+                  </div>
+                  {diffRegion.map(alt => <AltRow key={alt.id} alt={alt} ex={ex} repScheme={repScheme} onPick={pick} />)}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -421,19 +478,24 @@ function ReasoningPanel({ reasoning }) {
 }
 
 // ── One workout plan card ─────────────────────────────────────────────────────
-function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession }) {
+function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession, weeklyVolume = {}, userLevel = 2 }) {
   const [open, setOpen]         = useState(defaultOpen)
   const [equipIdx, setEquipIdx] = useState(0)
-  const [swaps, setSwaps]       = useState({})       // { [originalId]: replacementExercise }
+  const [swaps, setSwaps]       = useState({})       // { [originalId]: replacement+prescription }
   const [swapping, setSwapping] = useState(null)     // exercise being swapped
+  const [extras, setExtras]     = useState([])       // complementary exercises added by the user
+  const [lastSwapMuscle, setLastSwapMuscle] = useState(null) // drives complementary panel
+  const [dismissedSugg, setDismissedSugg] = useState(false)
 
-  // Apply swaps to a variant
+  const repScheme = SESSION_TYPES[sessionTypeId]?.repScheme || 'hypertrophy'
+
+  // Apply swaps to a variant (replacement carries its own represcribed sets/reps/rest/rir)
   const applySwaps = (v) => {
-    if (!v || !Object.keys(swaps).length) return v
-    const mapEx = ex => swaps[ex.id] ? { ...swaps[ex.id], sets: ex.sets, reps: ex.reps, rest: ex.rest, rir: ex.rir, _phase: ex._phase } : ex
+    if (!v) return v
+    const mapEx = ex => (swaps[ex.id] ? { ...swaps[ex.id], _phase: ex._phase } : ex)
     return {
       ...v,
-      solo: v.solo?.map(mapEx) || [],
+      solo: [...(v.solo?.map(mapEx) || []), ...extras],
       pairs: v.pairs?.map(p => ({ ...p, exercises: p.exercises.map(mapEx) })) || [],
     }
   }
@@ -446,6 +508,25 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession }) {
   const summary      = hasEx ? calcSummary(variant, plan.warmup || [], SESSION_TYPES[sessionTypeId] || {}) : []
   const totalMins    = summary.find(s => s[1] === 'Est. Time')?.[0] || ''
   const swapCount    = Object.keys(swaps).length
+
+  // All current exercises in the session (for coverage + suggestions)
+  const allEx = hasEx ? [...(variant.pairs || []).flatMap(p => p.exercises), ...(variant.solo || [])] : []
+  const coverage = analyzeCoverage(allEx)
+
+  // Complementary suggestions for the last swapped muscle
+  const suggestions = (lastSwapMuscle && !dismissedSugg)
+    ? suggestComplementary(allEx, lastSwapMuscle, equipTypes, repScheme, 2)
+    : []
+
+  const handleSwap = (replacement, presc) => {
+    setSwaps(s => ({ ...s, [swapping.id]: { ...replacement, ...presc } }))
+    setLastSwapMuscle(replacement.primary)
+    setDismissedSugg(false)
+  }
+  const addExtra = (sugg) => {
+    setExtras(e => [...e, { ...sugg, _phase: 'finisher' }])
+    setDismissedSugg(true)
+  }
 
   return (
     <div className="card" style={{ marginBottom: 16, padding: 0, overflow: 'hidden', border: `1px solid ${defaultOpen ? 'var(--green)' : 'var(--border)'}` }}>
@@ -499,10 +580,36 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession }) {
 
           {/* Session body */}
           <div style={{ padding: '4px 16px 12px' }}>
-            {swapCount > 0 && (
-              <div style={{ fontSize: '0.75rem', color: 'var(--green)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                🔄 {swapCount} exercise{swapCount > 1 ? 's' : ''} swapped
-                <button onClick={() => setSwaps({})} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: '0.7rem', textDecoration: 'underline', padding: 0 }}>Reset</button>
+            {(swapCount > 0 || extras.length > 0) && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--green)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                🔄 {swapCount} swapped{extras.length > 0 ? ` · ➕ ${extras.length} added` : ''}
+                <button onClick={() => { setSwaps({}); setExtras([]); setLastSwapMuscle(null) }} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: '0.7rem', textDecoration: 'underline', padding: 0 }}>Reset</button>
+              </div>
+            )}
+
+            {/* Redundancy warning */}
+            {coverage.redundant.length > 0 && (
+              <div style={{ fontSize: '0.75rem', color: '#f59e0b', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+                ⚠️ {coverage.redundant.map(r => `${r.count}× ${r.region}`).join(', ')} — consider varying the angle for fuller development.
+              </div>
+            )}
+
+            {/* Coach complementary suggestions */}
+            {suggestions.length > 0 && (
+              <div style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--blue)' }}>🧠 Coach suggests adding</span>
+                  <button onClick={() => setDismissedSugg(true)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: '0.7rem' }}>✕</button>
+                </div>
+                {suggestions.map(sg => (
+                  <div key={sg.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '6px 0', borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{sg.name} <span style={{ fontSize: '0.65rem', color: 'var(--text3)' }}>{sg.sets}×{sg.reps}</span></div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text2)', marginTop: 1 }}>{sg._reason}</div>
+                    </div>
+                    <button onClick={() => addExtra(sg)} style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 999, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>+ Add</button>
+                  </div>
+                ))}
               </div>
             )}
             {!hasEx ? (
@@ -524,7 +631,9 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession }) {
             <SwapModal
               ex={swapping}
               equipmentTypes={equipTypes}
-              onSwap={replacement => setSwaps(s => ({ ...s, [swapping.id]: replacement }))}
+              repScheme={repScheme}
+              userLevel={userLevel}
+              onSwap={handleSwap}
               onClose={() => setSwapping(null)}
             />
           )}
@@ -583,6 +692,12 @@ export default function Recommendations({ onStartSession }) {
   const deloadAlerts = detectDeloadNeed(sessions)
 
   const sessionType = SESSION_TYPES[sessionTypeId]
+
+  // Weekly volume + training level for Smart Session Rebuild
+  const weeklyVolume = useMemo(() => getMuscleVolume(sessions, 7), [sessions])
+  const bwKg = profile.unit === 'kg' ? profile.bodyweight : profile.bodyweight / 2.2046
+  const levelName = detectTrainingLevel(profile.liftMaxes, bwKg)
+  const userLevel = { untrained: 1, novice: 1, intermediate: 2, advanced: 3 }[levelName] || 2
 
   return (
     <div className="page fade-in">
@@ -686,6 +801,8 @@ export default function Recommendations({ onStartSession }) {
           defaultOpen={i === 0}
           sessionTypeId={sessionTypeId}
           onStartSession={onStartSession}
+          weeklyVolume={weeklyVolume}
+          userLevel={userLevel}
         />
       ))}
 
