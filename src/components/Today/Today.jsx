@@ -3,8 +3,9 @@ import { useStore } from '../../store/useStore.js'
 import { getProgramStatus, SPLIT_META, splitVariant, generateProgramWorkout, readinessAdjustment } from '../../utils/program.js'
 import { calculateTDEE, calculateMacroTargets, sumLogMacros, adaptiveTDEE, effectiveTDEE } from '../../utils/nutrition.js'
 import { computePRs } from '../../utils/analytics.js'
-import { gameStats, dailyQuests } from '../../utils/gamification.js'
+import { gameStats } from '../../utils/gamification.js'
 import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
+import SystemPanel from './SystemPanel.jsx'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -37,7 +38,7 @@ function Ring({ pct, color, size = 64, children }) {
 }
 
 export default function Today({ onNavigate, onStartSession, embedded = false }) {
-  const { profile, sessions, nutritionLogs, measurementHistory, completeQuest, useStreakShield, markLevelSeen } = useStore()
+  const { profile, sessions, nutritionLogs, measurementHistory, useStreakShield, markLevelSeen } = useStore()
   const [levelUp, setLevelUp] = useState(null)
 
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening' })()
@@ -74,8 +75,6 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
 
   // ── Gamification ──
   const game = useMemo(() => gameStats(profile, sessions, measurementHistory, nutritionLogs), [profile, sessions, measurementHistory, nutritionLogs])
-  const quests = dailyQuests(TODAY, readiness?.score)
-  const questDone = profile?.game?.questLog?.[TODAY] || []
 
   // Detect level-up → celebrate + grant bonus (once)
   const seenLevel = profile?.game?.seenLevel || 1
@@ -114,28 +113,8 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
         </div>
       </div>
 
-      {/* ── Daily quests ── */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Daily Quests</span>
-          <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>{questDone.length}/{quests.length} done · resets at midnight</span>
-        </div>
-        {quests.map(q => {
-          const done = questDone.includes(q.id)
-          return (
-            <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--bg3)', opacity: done ? 0.55 : 1 }}>
-              <span style={{ fontSize: '1.1rem' }}>{q.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.8125rem', fontWeight: 600, textDecoration: done ? 'line-through' : 'none' }}>{q.text}</div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--green)' }}>+{q.reward} 🪙</div>
-              </div>
-              {done
-                ? <span style={{ color: 'var(--green)', fontWeight: 700 }}>✓</span>
-                : <button onClick={() => completeQuest(TODAY, q)} style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 999, border: 'none', background: 'var(--green)', color: '#000', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Claim</button>}
-            </div>
-          )
-        })}
-      </div>
+      {/* ── The System — smart daily quests ── */}
+      <SystemPanel readinessScore={readiness?.score} />
 
       {/* ── Today's training ── */}
       <div className="card" style={{ marginBottom: 16 }}>

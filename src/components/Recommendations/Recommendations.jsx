@@ -791,7 +791,7 @@ export default function Recommendations({ onStartSession }) {
       )}
 
       {/* Optimal rest-of-week volume allocation */}
-      <WeekPlanner />
+      <WeekPlanner onStartSession={onStartSession} />
 
       {/* Session type picker */}
       <SessionTypePicker selected={sessionTypeId} onChange={setSessionTypeId} />

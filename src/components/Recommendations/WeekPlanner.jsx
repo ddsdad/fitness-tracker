@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore.js'
-import { planRestOfWeek, FIBER_PROFILES } from '../../utils/weekPlanner.js'
+import { planRestOfWeek, buildDayWorkout, FIBER_PROFILES } from '../../utils/weekPlanner.js'
+import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
 
 // ── Compact "rest of week" optimal allocation card ────────────────────────────
-export default function WeekPlanner() {
+export default function WeekPlanner({ onStartSession }) {
   const { profile, sessions, goals } = useStore()
   const [open, setOpen] = useState(true)
 
@@ -76,6 +77,12 @@ export default function WeekPlanner() {
                     <div style={{ fontWeight: 800, color: 'var(--green)', fontSize: '1rem' }}>{d.totalSets}</div>
                     <div style={{ fontSize: '0.55rem', color: 'var(--text3)', textTransform: 'uppercase' }}>sets</div>
                   </div>
+                )}
+                {d.isToday && d.totalSets > 0 && onStartSession && (
+                  <button
+                    onClick={() => onStartSession(planExercisesToSession(buildDayWorkout(d, profile)))}
+                    style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#000', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                  >▶ Start</button>
                 )}
               </div>
             ))}

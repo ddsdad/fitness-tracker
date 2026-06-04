@@ -14,6 +14,7 @@
 //      automatically re-optimize; log a heavy chest day and chest debt drops.
 // ════════════════════════════════════════════════════════════════════════════
 import { MUSCLE_GROUPS, RP_VOLUME, GOAL_MUSCLE_WEIGHTS } from '../data/muscles.js'
+import { EXERCISES } from '../data/exercises.js'
 import { getCurrentWeek, getWeekRange, sessionsInWeek, muscleVolumeForSessions } from './weekly.js'
 import { getMuscleWeeklyTarget } from './recommendations.js'
 
@@ -196,4 +197,41 @@ export function planRestOfWeek(sessions, profile, customWeights = null, today = 
     totals: { scheduledSets, debtBefore: Math.round(debtBefore), coveragePct },
     stillShort,
   }
+}
+
+// ── Turn a planned day's muscle allocation into concrete exercises ─────────────
+// For each muscle, pick the best-fit exercises (compound first) and split the
+// allocated sets across 1-2 movements, ~3-4 sets each. Returns plan-exercise
+// objects ready for planExercisesToSession().
+export function buildDayWorkout(planDay, profile) {
+  if (!planDay || !planDay.muscles?.length) return []
+  const fiber = getFiberProfile(profile?.fiberType)
+  const reps = fiber.repBias === 'high' ? '12–15' : fiber.repBias === 'low' ? '5–8' : '8–12'
+  const out = []
+  const usedIds = new Set()
+
+  for (const { muscle, sets } of planDay.muscles) {
+    const pool = EXERCISES.filter(e => e.primary === muscle && !usedIds.has(e.id))
+    if (!pool.length) continue
+    const compounds  = pool.filter(e => e.category === 'compound').sort((a, b) => a.difficulty - b.difficulty)
+    const isolations = pool.filter(e => e.category !== 'compound').sort((a, b) => a.difficulty - b.difficulty)
+
+    // 1 movement for ≤4 sets, 2 movements when more volume is allocated
+    const movements = sets > 4 ? 2 : 1
+    const picks = []
+    if (compounds[0]) picks.push(compounds[0])
+    if (movements === 2) picks.push(isolations[0] || compounds[1] || compounds[0])
+    else if (!picks.length && isolations[0]) picks.push(isolations[0])
+
+    const per = Math.max(2, Math.round(sets / picks.length))
+    for (const ex of picks.filter(Boolean)) {
+      if (usedIds.has(ex.id)) continue
+      usedIds.add(ex.id)
+      out.push({
+        id: ex.id, name: ex.name, primary: ex.primary, secondary: ex.secondary || [],
+        category: ex.category, equipment: ex.equipment, sets: Math.min(5, per), reps,
+      })
+    }
+  }
+  return out
 }
