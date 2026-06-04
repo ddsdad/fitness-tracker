@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { sanitize } from '../../utils/sanitize.js'
 import { generateMilestones } from '../../utils/milestones.js'
 import { PHYSIQUE_GOALS, GOAL_MUSCLE_WEIGHTS } from '../../data/muscles.js'
 import { IconChevronRight, IconChevronLeft, IconCheck } from '../shared/Icons.jsx'
@@ -42,6 +43,7 @@ export default function Onboarding({ onComplete }) {
     const ht = parseF(data.height)
     const profile = {
       ...data,
+      name:       sanitize(data.name),
       age:        parseInt(data.age) || 25,
       bodyweight: bw,
       height:     ht,
@@ -183,19 +185,22 @@ function FrameStep({ data, update }) {
   return (
     <div>
       <h2 style={{ marginBottom: 4 }}>Frame Measurements</h2>
-      <p style={{ color: 'var(--text2)', marginBottom: 24, fontSize: '0.9375rem' }}>
-        Wrist and ankle never change — they calibrate your genetic ceiling and ideal proportions via the Casey Butt formula and Steve Reeves ratios.
+      <p style={{ color: 'var(--text2)', marginBottom: 8, fontSize: '0.9375rem' }}>
+        All optional — skip if you don't have a tape measure handy. You can add these later in Settings.
       </p>
+      <div style={{ marginBottom: 20, background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 'var(--radius-sm)', padding: 12, fontSize: '0.8125rem', color: 'var(--text2)', lineHeight: 1.6 }}>
+        These unlock: genetic ceiling (max LBM), ideal proportions, and Navy BF% (neck + waist). Wrist and ankle don't change over time — measure once.
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {[
-          { key: 'wrist', label: 'Wrist Circumference', hint: 'Smallest point', placeholder: u === 'cm' ? '17' : '6.7', importance: 'high' },
-          { key: 'ankle', label: 'Ankle Circumference', hint: 'Smallest point', placeholder: u === 'cm' ? '22' : '8.7', importance: 'high' },
-          { key: 'neck',  label: 'Neck Circumference',  hint: 'Just below Adam\'s apple', placeholder: u === 'cm' ? '38' : '15', importance: 'medium' },
+          { key: 'wrist', label: 'Wrist Circumference', hint: 'Smallest point', placeholder: u === 'cm' ? '17' : '6.7' },
+          { key: 'ankle', label: 'Ankle Circumference', hint: 'Smallest point', placeholder: u === 'cm' ? '22' : '8.7' },
+          { key: 'neck',  label: 'Neck Circumference',  hint: "Just below Adam's apple", placeholder: u === 'cm' ? '38' : '15' },
         ].map(f => (
           <div key={f.key}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <label style={{ margin: 0 }}>{f.label} <span style={{ color: 'var(--text3)', fontSize: '0.75rem' }}>— {f.hint}</span></label>
-              {f.importance === 'high' && <span className="badge badge-green" style={{ fontSize: '0.625rem' }}>KEY</span>}
+              <span style={{ fontSize: '0.7rem', color: 'var(--text3)', fontStyle: 'italic' }}>optional</span>
             </div>
             <div className="input-unit">
               <input className="input" type="number" inputMode="decimal" placeholder={f.placeholder} value={data[f.key]} onChange={e => update(f.key, e.target.value)} />
@@ -203,9 +208,6 @@ function FrameStep({ data, update }) {
             </div>
           </div>
         ))}
-      </div>
-      <div style={{ marginTop: 20, background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 'var(--radius-sm)', padding: 14, fontSize: '0.8125rem', color: 'var(--text2)', lineHeight: 1.6 }}>
-        These unlock: genetic ceiling (max LBM), Steve Reeves ideal proportions for every body part, frame size classification, and Navy BF% (with neck + waist).
       </div>
     </div>
   )

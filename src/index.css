@@ -20,9 +20,90 @@
   --nav-h: 64px;
 }
 
-html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; overscroll-behavior: none; }
+html, body { height: 100%; width: 100%; max-width: 100%; overflow-x: hidden; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior: none; }
 
-#root { height: 100%; display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; position: relative; }
+#root { height: 100%; width: 100%; display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; position: relative; overflow-x: hidden; }
+
+/* Prevent iOS Safari from auto-zooming when focusing inputs (font-size must be >= 16px) */
+input, select, textarea { font-size: 16px; }
+@media (max-width: 380px) { html { font-size: 15px; } }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DESKTOP / WEB LAYOUT
+   On a desktop browser the app was rendering as a 480px strip floating in a sea
+   of dead, non-interactive space — so the cursor often landed on nothing.
+   Here we: give the page an intentional backdrop, dock a real sidebar nav with
+   big mouse targets, and offset the app column so nothing is "lost".
+   Activated by <html data-device="desktop"> set from useDeviceType().
+   ════════════════════════════════════════════════════════════════════════════ */
+html[data-device="desktop"] body {
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(34,197,94,0.07), transparent 60%),
+    radial-gradient(1000px 600px at 100% 110%, rgba(59,130,246,0.06), transparent 55%),
+    var(--bg);
+}
+
+/* Sidebar nav (desktop only) */
+.nav-desktop {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: 240px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 20px 14px;
+  z-index: 100;
+}
+.nav-desktop-brand {
+  font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em;
+  padding: 8px 12px 20px;
+}
+.nav-desktop-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px; border-radius: 10px;
+  border: none; background: none; cursor: pointer;
+  color: var(--text2); font-size: 0.95rem; font-weight: 600;
+  text-align: left; width: 100%; transition: background 0.12s, color 0.12s;
+}
+.nav-desktop-item:hover { background: var(--bg3); color: var(--text); }
+.nav-desktop-item.active { background: rgba(34,197,94,0.12); color: var(--green); }
+.nav-desktop-item svg { width: 22px; height: 22px; flex-shrink: 0; }
+
+/* App column: widen it, push it right of the sidebar, center the remaining space */
+html[data-device="desktop"] #root {
+  max-width: 760px;
+  margin-left: calc(240px + max(0px, (100vw - 240px - 760px) / 2));
+  margin-right: auto;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  min-height: 100dvh;
+  box-shadow: 0 0 60px rgba(0,0,0,0.4);
+  /* A transform makes #root the containing block for ALL position:fixed
+     descendants — so every full-screen modal (food picker, exercise picker,
+     check-in, etc.) is constrained to the app column instead of stretching
+     across the whole 1440px window. One rule covers every modal. */
+  transform: translateZ(0);
+}
+
+/* Desktop pages: no bottom-nav gap needed, a little more breathing room */
+html[data-device="desktop"] .page {
+  padding: 28px 28px;
+  padding-bottom: 48px;
+  max-width: 720px; margin: 0 auto;
+}
+
+/* Mouse-friendly: bump up small tap targets that were sized for fingers */
+html[data-device="desktop"] .btn { cursor: pointer; }
+html[data-device="desktop"] button { cursor: pointer; }
+
+/* Narrow desktop window (< 900px): collapse sidebar to icons so nothing overlaps */
+@media (min-width: 768px) and (max-width: 900px) {
+  html[data-device="desktop"] .nav-desktop { width: 72px; padding: 20px 10px; }
+  html[data-device="desktop"] .nav-desktop-brand { font-size: 1.4rem; text-align: center; padding: 8px 0 20px; }
+  html[data-device="desktop"] .nav-desktop-item span { display: none; }
+  html[data-device="desktop"] .nav-desktop-item { justify-content: center; padding: 12px 0; }
+  html[data-device="desktop"] #root { margin-left: 72px; max-width: none; border-right: none; }
+}
 
 /* Scrollbars */
 ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }

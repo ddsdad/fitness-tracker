@@ -432,10 +432,12 @@ export default function Compete() {
           {myRank === 0 && (
             <div style={{
               background: 'rgba(34,197,94,0.06)', border: '1px dashed rgba(34,197,94,0.3)',
-              borderRadius: 12, padding: '14px 16px', marginTop: 8,
-              fontSize: '0.875rem', color: 'var(--text2)', textAlign: 'center',
+              borderRadius: 12, padding: '16px', marginTop: 8, textAlign: 'center',
             }}>
-              Log a workout to appear on the leaderboard! Your stats sync automatically.
+              <div style={{ fontWeight: 600, fontSize: '0.9375rem', marginBottom: 4 }}>You're not ranked yet</div>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', lineHeight: 1.5 }}>
+                Log a workout to appear here. Your stats sync automatically when you sign in.
+              </div>
             </div>
           )}
         </div>

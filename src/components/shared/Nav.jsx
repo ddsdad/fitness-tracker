@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { IconHome, IconDumbbell, IconChart, IconTarget, IconStar, IconApple } from './Icons.jsx'
 
 const tabs = [
@@ -9,7 +10,28 @@ const tabs = [
   { id: 'nutrition',  label: 'Nutrition',  Icon: IconApple },
 ]
 
-export default function Nav({ active, onNavigate }) {
+export default function Nav({ active, onNavigate, variant = 'mobile' }) {
+  if (variant === 'desktop') {
+    // Portal to <body> so it stays pinned to the screen edge, unaffected by the
+    // #root transform that constrains modals to the app column.
+    return createPortal(
+      <nav className="nav-desktop">
+        <div className="nav-desktop-brand">💪 FitTrack</div>
+        {tabs.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            className={`nav-desktop-item${active === id ? ' active' : ''}`}
+            onClick={() => onNavigate(id)}
+          >
+            <Icon />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>,
+      document.body
+    )
+  }
+
   return (
     <nav className="nav">
       {tabs.map(({ id, label, Icon }) => (

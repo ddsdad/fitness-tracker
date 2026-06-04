@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useStore } from '../../store/useStore.js'
-import { getProgramStatus, SPLIT_META, splitVariant, generateProgramWorkout } from '../../utils/program.js'
+import { getProgramStatus, SPLIT_META, splitVariant, generateProgramWorkout, readinessAdjustment } from '../../utils/program.js'
 import { calculateTDEE, calculateMacroTargets, sumLogMacros, adaptiveTDEE, effectiveTDEE } from '../../utils/nutrition.js'
 import { computePRs } from '../../utils/analytics.js'
 import { gameStats, dailyQuests } from '../../utils/gamification.js'
@@ -156,9 +156,20 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
               <span style={{ fontSize: '2rem' }}>{splitMeta.emoji}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700 }}>{splitMeta.label} <span style={{ fontSize: '0.7rem', color: 'var(--text3)', fontWeight: 400 }}>· Week {prog.week}, {prog.weekPlan.phase}</span></div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>{readiness ? `Readiness ${readiness.score} logged` : 'Do a quick readiness check in Plan'}</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>{readiness ? `Readiness ${readiness.score}/100` : 'Do a quick readiness check in Plan'}</div>
               </div>
             </div>
+            {(() => {
+              const adj = readiness ? readinessAdjustment(readiness.score) : null
+              if (adj && adj.label !== 'Primed' && adj.label !== 'Ready') {
+                return (
+                  <div style={{ background: `${adj.color}18`, border: `1px solid ${adj.color}44`, borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: '0.8rem', color: adj.color, lineHeight: 1.5 }}>
+                    <strong>{adj.label}:</strong> {adj.message}
+                  </div>
+                )
+              }
+              return null
+            })()}
             <button className="btn btn-primary btn-full" onClick={() => {
               const variant = splitVariant(profile.program.schedule, prog.dayInWeek)
               const wk = generateProgramWorkout(split, prog.weekPlan, variant)

@@ -8,6 +8,7 @@ const KEYS = {
   RECIPES:     'ft_recipes',
   CUSTOM_EX:   'ft_custom_exercises',
   ROUTINES:    'ft_routines',
+  WEEK_SUMMARIES: 'ft_week_summaries',
 }
 
 function get(key) {
@@ -117,6 +118,10 @@ export const storage = {
   setRoutines: (a) => set(KEYS.ROUTINES, a),
   addRoutine: (r) => { const a = storage.getRoutines(); a.unshift(r); set(KEYS.ROUTINES, a) },
   deleteRoutine: (id) => set(KEYS.ROUTINES, storage.getRoutines().filter(x => x.id !== id)),
+
+  // Weekly summaries archive: [{ week, label, headline, focus, sessionCount, volume, prs, onTrack, behind, proteinDays, ... }]
+  getWeekSummaries: () => get(KEYS.WEEK_SUMMARIES) || [],
+  setWeekSummaries: (s) => set(KEYS.WEEK_SUMMARIES, s),
 
   clearAll: () => Object.values(KEYS).forEach(k => localStorage.removeItem(k)),
 }

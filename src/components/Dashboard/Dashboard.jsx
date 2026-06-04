@@ -5,14 +5,14 @@ import BodyStatsPanel from './BodyStatsPanel.jsx'
 import { getMuscleVolume, getMuscleStatus, getMuscleDetail } from '../../utils/heatmap.js'
 import { MUSCLE_GROUPS, RP_VOLUME } from '../../data/muscles.js'
 import { getCurrentWeek } from '../../utils/milestones.js'
+import { getWeekRange, weekRangeLabel, sessionsInWeek, muscleVolumeForSessions } from '../../utils/weekly.js'
+import WeeklySummary from './WeeklySummary.jsx'
 import { structuralRiskScore } from '../../utils/balance.js'
 import { getWeekScheduleData } from '../../utils/recommendations.js'
-import { weeklyReport } from '../../utils/coach.js'
 import Compete from '../Compete/Compete.jsx'
 import Settings from '../Settings/Settings.jsx'
 import Today from '../Today/Today.jsx'
 
-const TIME_WINDOWS = [{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: 'All', days: 365 }]
 
 // Muscle → split colour bucket
 const MUSCLE_SPLIT_COLOR = {
@@ -170,17 +170,22 @@ const LEGEND = [
 
 export default function Dashboard({ onNavigate, onStartSession }) {
   const { profile, sessions, goals, nutritionLogs } = useStore()
-  const [window_, setWindow_] = useState(7)
   const [activeMuscle, setActiveMuscle] = useState(null)
   const [tab, setTab] = useState('today') // today | heatmap | schedule | compete | stats
   const [showSettings, setShowSettings] = useState(false)
 
-  const muscleVolume = getMuscleVolume(sessions, window_)
   const goalId = profile?.physiqueGoal || 'overall_size'
   const customWeights = Object.keys(goals).length > 0 ? goals : null
 
   const currentWeek = profile ? getCurrentWeek(profile.startDate) : 1
   const weeksLeft   = profile ? Math.max(0, profile.targetWeeks - currentWeek) : 0
+
+  // Heatmap now reflects a specific PROGRAM WEEK (default = current), not a
+  // rolling window — so "week 2" means week 2, matching how the user thinks.
+  const [viewWeek, setViewWeek] = useState(currentWeek)
+  const muscleVolume = profile?.startDate
+    ? muscleVolumeForSessions(sessionsInWeek(sessions, profile.startDate, viewWeek))
+    : getMuscleVolume(sessions, 7)
 
   const cutoff7 = new Date(); cutoff7.setDate(cutoff7.getDate() - 7)
   const sessions7 = sessions.filter(s => new Date(s.date) >= cutoff7)
@@ -247,34 +252,23 @@ export default function Dashboard({ onNavigate, onStartSession }) {
       {tab === 'schedule' && <WeekSchedule sessions={sessions} goals={goals} profile={profile} />}
       {tab === 'compete'  && <Compete />}
 
-      {tab === 'heatmap' && (
+      {tab === 'heatmap' && sessions.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: '3rem' }}>🗺️</div>
+          <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>No training data yet</div>
+          <div style={{ color: 'var(--text2)', fontSize: '0.875rem', maxWidth: 280, lineHeight: 1.5 }}>
+            Log your first workout and the heatmap will show which muscles you're hitting and whether your volume is in the optimal zone.
+          </div>
+          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => onNavigate('workout')}>
+            Log First Workout
+          </button>
+        </div>
+      )}
+
+      {tab === 'heatmap' && sessions.length > 0 && (
         <>
-          {/* Weekly coach report */}
-          {(() => {
-            const r = weeklyReport(sessions, profile, nutritionLogs || {})
-            return (
-              <div className="card" style={{ marginBottom: 16, borderColor: 'rgba(34,197,94,0.25)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: '1.125rem' }}>🧠</span>
-                  <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>This Week</span>
-                  {r.volChange != null && (
-                    <span style={{ marginLeft: 'auto', fontSize: '0.75rem', fontWeight: 700, color: r.volChange >= 0 ? 'var(--green)' : '#f59e0b' }}>
-                      {r.volChange >= 0 ? '▲' : '▼'} {Math.abs(r.volChange)}% volume
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.875rem', color: 'var(--text)', fontWeight: 600 }}>{r.verdict}</div>
-                <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginTop: 4, lineHeight: 1.5 }}>{r.focus}</div>
-                {r.hasData && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10, fontSize: '0.7rem' }}>
-                    <span style={{ flex: 1, textAlign: 'center', background: 'var(--bg3)', borderRadius: 8, padding: '6px 4px' }}><strong style={{ fontSize: '0.95rem', display: 'block', color: 'var(--green)' }}>{r.sessionCount}</strong>sessions</span>
-                    <span style={{ flex: 1, textAlign: 'center', background: 'var(--bg3)', borderRadius: 8, padding: '6px 4px' }}><strong style={{ fontSize: '0.95rem', display: 'block' }}>{r.volume >= 1000 ? (r.volume/1000).toFixed(1)+'k' : r.volume}</strong>volume</span>
-                    <span style={{ flex: 1, textAlign: 'center', background: 'var(--bg3)', borderRadius: 8, padding: '6px 4px' }}><strong style={{ fontSize: '0.95rem', display: 'block' }}>{r.proteinDays}/7</strong>protein days</span>
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+          {/* High-level weekly summaries (live current week + auto-saved past weeks) */}
+          <WeeklySummary />
 
           {/* Imbalance warnings */}
           {risk.imbalances.length > 0 && (
@@ -288,16 +282,29 @@ export default function Dashboard({ onNavigate, onStartSession }) {
             </div>
           )}
 
-          {/* Time window selector */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-            <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, gap: 2 }}>
-              {TIME_WINDOWS.map(w => (
-                <button key={w.days} onClick={() => setWindow_(w.days)}
-                  style={{ padding: '6px 20px', borderRadius: 999, border: 'none', cursor: 'pointer', background: window_ === w.days ? 'var(--green)' : 'transparent', color: window_ === w.days ? '#000' : 'var(--text2)', fontWeight: 600, fontSize: '0.875rem', transition: 'all 0.15s' }}>
-                  {w.label}
-                </button>
-              ))}
+          {/* Program-week navigator — the heatmap reflects ONE week at a time */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 8 }}>
+            <button
+              onClick={() => setViewWeek(w => Math.max(1, w - 1))}
+              disabled={viewWeek <= 1}
+              style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: viewWeek <= 1 ? 'default' : 'pointer', opacity: viewWeek <= 1 ? 0.35 : 1, fontSize: '1.1rem' }}
+              aria-label="Previous week"
+            >‹</button>
+            <div style={{ textAlign: 'center', minWidth: 140 }}>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>
+                Week {viewWeek}{viewWeek === currentWeek && <span className="badge badge-green" style={{ marginLeft: 6 }}>Current</span>}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>{profile?.startDate ? weekRangeLabel(profile.startDate, viewWeek) : ''}</div>
             </div>
+            <button
+              onClick={() => setViewWeek(w => Math.min(currentWeek, w + 1))}
+              disabled={viewWeek >= currentWeek}
+              style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: viewWeek >= currentWeek ? 'default' : 'pointer', opacity: viewWeek >= currentWeek ? 0.35 : 1, fontSize: '1.1rem' }}
+              aria-label="Next week"
+            >›</button>
+          </div>
+          <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'var(--text3)', marginBottom: 16 }}>
+            Heatmap shows sets logged in this program week
           </div>
 
           {/* 3D body heatmap */}

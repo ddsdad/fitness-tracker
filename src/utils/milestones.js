@@ -148,12 +148,10 @@ export function generateMilestones(profile) {
 }
 
 // ─── Current week since program start ───────────────────────────────────────
-export function getCurrentWeek(startDate) {
-  const start = new Date(startDate)
-  const now   = new Date()
-  const diffMs = now - start
-  return Math.max(1, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)))
-}
+// Re-exported from weekly.js so the whole app shares ONE definition of "week".
+// (Previously this used ceil() while weekly.js used floor()+1, which disagreed
+//  at week boundaries and made the heatmap merge two weeks together.)
+export { getCurrentWeek } from './weekly.js'
 
 // ─── Compare actual vs target ────────────────────────────────────────────────
 export function getProgressStatus(actual, target, isLoss = false) {

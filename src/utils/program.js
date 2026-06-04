@@ -132,3 +132,70 @@ export function splitVariant(schedule, dayInWeek) {
   for (let i = 0; i < dayInWeek; i++) if (schedule[i] === split) count++
   return count
 }
+
+// ── Adaptive weekly schedule ──────────────────────────────────────────────────
+// The base schedule is fixed, but life isn't. If a training day passes with no
+// logged session, the remaining sessions SHIFT FORWARD into the following days
+// (eating the rest day if needed) so nothing is silently lost.
+//
+//   baseSchedule    e.g. ['push','pull','legs','push','pull','legs','rest']
+//   weekStart       Date — first day of the current program week (local midnight)
+//   sessionsThisWeek sessions logged within this week
+//   today           Date (defaults to now)
+//
+// Returns { days[], dayInWeek, todaySplit, variant }
+// each day = { day, split, status } where status ∈
+//   'completed' | 'missed' | 'rest_past' | 'today' | 'upcoming' | 'rest'
+export function resolveWeekSchedule(baseSchedule, weekStart, sessionsThisWeek = [], today = new Date()) {
+  const start = new Date(weekStart); start.setHours(0, 0, 0, 0)
+  const now = new Date(today); now.setHours(0, 0, 0, 0)
+  const totalDays = baseSchedule.length
+  const dayInWeek = Math.min(totalDays - 1, Math.max(0, Math.floor((now - start) / 86_400_000)))
+  const trainingQueue = baseSchedule.filter(s => s !== 'rest')
+
+  // Which day-indexes (0..6) had at least one logged session?
+  const loggedDays = new Set()
+  sessionsThisWeek.forEach(s => {
+    const d = new Date(s.date); d.setHours(0, 0, 0, 0)
+    const idx = Math.floor((d - start) / 86_400_000)
+    if (idx >= 0 && idx < totalDays) loggedDays.add(idx)
+  })
+
+  const days = []
+  let consumed = 0
+
+  // Past days — a logged day consumes the next training slot; an empty training
+  // day is "missed" and does NOT consume a slot (so it shifts forward).
+  for (let d = 0; d < dayInWeek; d++) {
+    if (loggedDays.has(d)) {
+      days.push({ day: d, split: trainingQueue[consumed] ?? 'rest', status: 'completed' })
+      consumed++
+    } else if (baseSchedule[d] === 'rest') {
+      days.push({ day: d, split: 'rest', status: 'rest_past' })
+    } else {
+      days.push({ day: d, split: null, status: 'missed' })
+    }
+  }
+
+  // Today + future — distribute the remaining training sessions one per day,
+  // then fill any leftover days with rest.
+  const remaining = trainingQueue.slice(consumed)
+  let ri = 0
+  for (let d = dayInWeek; d < totalDays; d++) {
+    if (d === dayInWeek && loggedDays.has(d)) {
+      days.push({ day: d, split: remaining[ri] ?? 'rest', status: 'completed' }); ri++
+    } else if (ri < remaining.length) {
+      days.push({ day: d, split: remaining[ri], status: d === dayInWeek ? 'today' : 'upcoming' }); ri++
+    } else {
+      days.push({ day: d, split: 'rest', status: d === dayInWeek ? 'today' : 'upcoming' })
+    }
+  }
+
+  const todayEntry = days.find(x => x.day === dayInWeek)
+  const todaySplit = todayEntry?.split ?? 'rest'
+  // A/B variant = how many of the SAME split were completed/scheduled earlier this week
+  let variant = 0
+  for (const e of days) { if (e.day >= dayInWeek) break; if (e.split === todaySplit) variant++ }
+
+  return { days, dayInWeek, todaySplit, variant }
+}

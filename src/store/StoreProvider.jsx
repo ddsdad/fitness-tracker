@@ -11,6 +11,7 @@ import {
 } from '../lib/db.js'
 import { computeLeaderboardStats } from '../utils/leaderboard.js'
 import { gameStats, buildCookbookRecipes, openMysteryBox, THEMES } from '../utils/gamification.js'
+import { archiveCompletedWeeks } from '../utils/weekly.js'
 
 export function StoreProvider({ children }) {
   const [profile,            setProfileState]         = useState(null)
@@ -22,9 +23,11 @@ export function StoreProvider({ children }) {
   const [recipes,            setRecipesState]         = useState([])
   const [customExercises,    setCustomExercisesState] = useState([])
   const [routines,           setRoutinesState]        = useState([])
+  const [weekSummaries,      setWeekSummariesState]   = useState([])
   const [loaded,             setLoaded]               = useState(false)
   const [user,               setUser]                 = useState(null)
   const [syncStatus,         setSyncStatus]           = useState('idle')
+  const [syncFailCount,      setSyncFailCount]        = useState(0)
 
   const userRef    = useRef(null)
   const stateRef   = useRef({}) // live snapshot for leaderboard pushes
@@ -45,8 +48,20 @@ export function StoreProvider({ children }) {
     setRecipesState(storage.getRecipes())
     setCustomExercisesState(storage.getCustomExercises())
     setRoutinesState(storage.getRoutines())
+    setWeekSummariesState(storage.getWeekSummaries())
     setLoaded(true)
   }, [])
+
+  // ── Auto-archive any newly-completed program weeks (silent) ────────────────
+  useEffect(() => {
+    if (!loaded || !profile?.startDate) return
+    const existing = storage.getWeekSummaries()
+    const updated = archiveCompletedWeeks(profile, sessions, nutritionLogs, existing)
+    if (updated !== existing) {
+      storage.setWeekSummaries(updated)
+      setWeekSummariesState(updated)
+    }
+  }, [loaded, profile?.startDate, sessions, nutritionLogs])
 
   // ── 2. Auth listener ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -143,13 +158,22 @@ export function StoreProvider({ children }) {
   function push(fn) {
     if (!userRef.current) return
     fn(userRef.current.id)
-      .then(() => setSyncStatus(s => (s === 'error' ? 'synced' : s)))   // recover on next success
-      .catch(e => { console.warn('[push]', e); setSyncStatus('error') })
+      .then(() => { setSyncStatus(s => (s === 'error' ? 'synced' : s)); setSyncFailCount(0) })
+      .catch(e => { console.warn('[push]', e); setSyncStatus('error'); setSyncFailCount(n => n + 1) })
   }
+
+  const retrySync = useCallback(() => {
+    if (!userRef.current) return
+    handleSignIn(userRef.current.id)
+  }, [])
 
   // ── 6. Store actions ───────────────────────────────────────────────────────
   const setProfile = useCallback((p) => {
-    const stamped = { ...p, _ts: Date.now() }   // for last-writer conflict resolution
+    const isNew = !storage.getProfile()
+    const withBonus = isNew
+      ? { ...p, game: { ...(p.game || {}), questCoins: ((p.game?.questCoins) || 0) + 50 } }
+      : p
+    const stamped = { ...withBonus, _ts: Date.now() }
     storage.setProfile(stamped); setProfileState(stamped)
     push(uid => saveProfile(uid, stamped))
     scheduleLeaderboardPush()
@@ -352,7 +376,7 @@ export function StoreProvider({ children }) {
   const resetApp = useCallback(async () => {
     storage.clearAll()
     setProfileState(null); setSessionsState([]); setCheckinsState([])
-    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([]); setRecipesState([]); setCustomExercisesState([]); setRoutinesState([])
+    setGoalsState({}); setNutritionLogsState({}); setMeasurementHistoryState([]); setRecipesState([]); setCustomExercisesState([]); setRoutinesState([]); setWeekSummariesState([])
     if (userRef.current) { await supabase.auth.signOut(); setUser(null); userRef.current = null }
     localStorage.removeItem('ft_auth_skipped')
   }, [])
@@ -374,10 +398,11 @@ export function StoreProvider({ children }) {
       recipes, addRecipe, deleteRecipe,
       customExercises, addCustomExercise,
       routines, addRoutine, deleteRoutine,
+      weekSummaries,
       convertAllUnits,
       completeQuest, equipTheme, buyShopItem, useStreakShield, markLevelSeen,
       loaded, resetApp,
-      user, syncStatus, signOut,
+      user, syncStatus, syncFailCount, retrySync, signOut,
     }}>
       {children}
     </StoreContext.Provider>

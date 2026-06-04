@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useStore } from '../../store/useStore.js'
 import {
   generateProgram, getProgramStatus, readinessScore, readinessAdjustment,
-  generateProgramWorkout, splitVariant, SPLIT_META, PPL_SCHEDULE,
+  generateProgramWorkout, SPLIT_META,
+  resolveWeekSchedule,
 } from '../../utils/program.js'
 import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
 import { MUSCLE_GROUPS } from '../../data/muscles.js'
+import { getWeekRange, getCurrentWeek, sessionsInWeek } from '../../utils/weekly.js'
 
 const TODAY_STR = new Date().toISOString().slice(0, 10)
 const readKey = 'ft_readiness'
@@ -59,7 +61,7 @@ function ReadinessCheck({ onSave }) {
 
 // ── Main Program view ─────────────────────────────────────────────────────────
 export default function Program({ onStartSession }) {
-  const { profile, setProfile } = useStore()
+  const { profile, setProfile, sessions = [] } = useStore()
   const [showAllWeeks, setShowAllWeeks] = useState(false)
   const [readiness, setReadinessState] = useState(() => getReadiness(TODAY_STR))
   const [redoReadiness, setRedoReadiness] = useState(false)
@@ -108,10 +110,17 @@ export default function Program({ onStartSession }) {
     )
   }
 
-  const { week, dayInWeek, split, weekPlan } = status
+  const { week, weekPlan } = status
+
+  // Adaptive schedule: reflow around missed days within the current program week.
+  const curWeek = getCurrentWeek(program.startDate)
+  const { start: weekStart } = getWeekRange(program.startDate, curWeek)
+  const weekSessions = sessionsInWeek(sessions, program.startDate, curWeek)
+  const resolved = resolveWeekSchedule(program.schedule, weekStart, weekSessions)
+  const { days: scheduleDays, dayInWeek, todaySplit: split, variant } = resolved
+
   const meta = SPLIT_META[split]
   const isRest = split === 'rest'
-  const variant = splitVariant(program.schedule, dayInWeek)
   const adj = readiness ? readinessAdjustment(readiness.score) : null
   const workout = isRest ? [] : generateProgramWorkout(split, weekPlan, variant, adj)
   const progressPct = Math.round((week - 1) / program.totalWeeks * 100)
@@ -138,25 +147,37 @@ export default function Program({ onStartSession }) {
         <div style={{ fontSize: '0.75rem', color: 'var(--text2)' }}>{weekPlan.focus}</div>
       </div>
 
-      {/* This week's schedule */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 5, marginBottom: 16 }}>
-        {program.schedule.map((s, i) => {
-          const m = SPLIT_META[s]
-          const isToday = i === dayInWeek
+      {/* This week's ADAPTIVE schedule — reflows around missed days */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 5, marginBottom: 6 }}>
+        {scheduleDays.map((d) => {
+          const isMissed = d.status === 'missed'
+          const isCompleted = d.status === 'completed'
+          const isToday = d.status === 'today'
+          const m = SPLIT_META[d.split] || SPLIT_META.rest
+          const border = isToday ? 'var(--green)' : isMissed ? 'rgba(239,68,68,0.5)' : 'var(--border)'
+          const bg = isToday ? 'rgba(34,197,94,0.08)' : isCompleted ? 'rgba(34,197,94,0.05)' : isMissed ? 'rgba(239,68,68,0.06)' : 'var(--bg2)'
+          const DOW = ['M','T','W','T','F','S','S']
           return (
-            <div key={i} style={{
-              textAlign: 'center', padding: '8px 2px', borderRadius: 8,
-              border: `2px solid ${isToday ? 'var(--green)' : 'var(--border)'}`,
-              background: isToday ? 'rgba(34,197,94,0.08)' : 'var(--bg2)',
+            <div key={d.day} style={{
+              textAlign: 'center', padding: '7px 2px', borderRadius: 8,
+              border: `2px solid ${border}`, background: bg, position: 'relative',
             }}>
-              <div style={{ fontSize: '1rem' }}>{m.emoji}</div>
-              <div style={{ fontSize: '0.55rem', color: isToday ? 'var(--green)' : 'var(--text3)', fontWeight: isToday ? 700 : 400, marginTop: 2 }}>
-                {s === 'rest' ? 'Rest' : m.label.split(' ')[0]}
+              <div style={{ fontSize: '0.5rem', color: 'var(--text3)', marginBottom: 1 }}>{DOW[d.day]}</div>
+              <div style={{ fontSize: '1rem', opacity: isMissed ? 0.4 : 1 }}>{isMissed ? '⤵️' : m.emoji}</div>
+              <div style={{ fontSize: '0.52rem', color: isToday ? 'var(--green)' : isMissed ? 'var(--red)' : isCompleted ? 'var(--green)' : 'var(--text3)', fontWeight: (isToday || isCompleted) ? 700 : 400, marginTop: 2 }}>
+                {isMissed ? 'Moved' : d.split === 'rest' ? 'Rest' : m.label.split(' ')[0]}
               </div>
+              {isCompleted && <div style={{ position: 'absolute', top: 2, right: 3, fontSize: '0.5rem', color: 'var(--green)' }}>✓</div>}
             </div>
           )
         })}
       </div>
+      {scheduleDays.some(d => d.status === 'missed') && (
+        <div style={{ fontSize: '0.7rem', color: 'var(--text3)', textAlign: 'center', marginBottom: 16 }}>
+          ⤵️ Missed a day — remaining sessions shifted forward into the week.
+        </div>
+      )}
+      {!scheduleDays.some(d => d.status === 'missed') && <div style={{ marginBottom: 16 }} />}
 
       {/* Rest day */}
       {isRest ? (

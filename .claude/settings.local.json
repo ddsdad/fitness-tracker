@@ -17,7 +17,25 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(Get-ChildItem -Recurse -Depth 2 -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object FullName)",
+      "Bash(cd \"/c/Users/siema/OneDrive/Desktop/Fitness\" && find . -type f -name \"*.json\" -o -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.js\" -o -name \"*.jsx\" | head -50)",
+      "Bash(awk '{print $9, \"\\(\" $5 \"\\)\"}')",
+      "Bash(git checkout *)",
+      "Bash(extract-text \"Functional+Fitness+Exercise+Database+\\(version+2.9\\).xlsx\")",
+      "Bash(python -c ' *)",
+      "Bash(python scripts/import_exercises.py)",
+      "Bash(python scripts/import_foods.py)",
+      "Bash(node -e \"require\\('./src/data/foods.js'\\)\")",
+      "Bash(awk 'NR>=60 && NR<=200 {print NR\": \"$0}' src/store/StoreProvider.jsx)",
+      "Bash(awk '{ print NR\": \"length\\($0\\) }' src/store/StoreProvider.jsx)",
+      "Bash(sort -t: -k2 -rn)",
+      "PowerShell($lines = Get-Content \"src/store/StoreProvider.jsx\"; $i=0; $lines | ForEach-Object { $i++; if \\($_.Length -gt 300\\) { \"$i : $\\($_.Length\\)\" } } | Select-Object -First 15; \"TOTAL LINES: $\\($lines.Count\\)\")",
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"src/store/StoreProvider.jsx\"\\); $result = \"FirstBytes=\" + \\($bytes[0..2] -join '_'\\) + \" Size=\" + $bytes.Length; $result | Out-File -FilePath \"tmp_check.txt\" -Encoding utf8; Get-Content \"tmp_check.txt\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Read(//tmp/**)",
+      "Bash(node node_modules/vite/bin/vite.js build --mode development)"
     ]
   }
 }

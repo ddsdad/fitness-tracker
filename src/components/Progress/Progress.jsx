@@ -7,6 +7,9 @@ import { dotsScore, dotsTier, bigThreeTotalKg, acwr } from '../../utils/strength
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { IconPlus, IconCheck, IconArrowDown } from '../shared/Icons.jsx'
 import { e1rmTrend, topTrackedExercises, detectPlateau, weeklyVolumeSeries, bestWorstWeeks, gainRate, projectStrength, computePRs, exerciseDetail } from '../../utils/analytics.js'
+import CheckInModal from './CheckInModal.jsx'
+import EditMeasurementModal from './EditMeasurementModal.jsx'
+import ExerciseDetailModal from './ExerciseDetailModal.jsx'
 
 // ── Rep-max calculator tool ───────────────────────────────────────────────────
 function RepMaxCalc({ unit }) {
@@ -47,45 +50,6 @@ function RepMaxCalc({ unit }) {
   )
 }
 
-// ── Per-exercise history modal ────────────────────────────────────────────────
-function ExerciseDetailModal({ sessions, exerciseId, name, unit, onClose }) {
-  const rows = exerciseDetail(sessions, exerciseId).slice(0, 10)
-  const allTime = rows.reduce((m, r) => Math.max(m, r.e1rm), 0)
-  const trend = e1rmTrend(sessions, exerciseId)
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 300, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: 'var(--bg2)', marginTop: 'auto', borderRadius: '16px 16px 0 0', maxHeight: '88dvh', overflowY: 'auto', padding: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div>
-            <h3>{name}</h3>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>All-time est. 1RM: <strong style={{ color: 'var(--green)' }}>{allTime}{unit}</strong></div>
-          </div>
-          <button className="btn btn-ghost" onClick={onClose} style={{ fontSize: '1.25rem' }}>✕</button>
-        </div>
-        {trend.length >= 2 && (
-          <ResponsiveContainer width="100%" height={130}>
-            <LineChart data={trend} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--bg4)" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} domain={['auto','auto']} />
-              <Tooltip contentStyle={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.8rem' }} />
-              <Line type="monotone" dataKey="e1rm" stroke="var(--green)" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-        <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', margin: '12px 0 6px' }}>Last {rows.length} sessions</div>
-        {rows.map((r, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--bg3)' }}>
-            <div style={{ flex: 1, fontSize: '0.8125rem' }}>{new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text2)' }}>{r.sets} sets</div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>top {r.topSet.weight}×{r.topSet.reps}</div>
-            <div style={{ fontSize: '0.8125rem', color: 'var(--yellow)' }}>{r.e1rm}{unit}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 // ── Streak calculation ────────────────────────────────────────────────────────
 function calcStreak(sessions) {
@@ -151,102 +115,6 @@ function MetricChart({ data, dataKey, targetKey, label, color = '#22c55e', unit 
   )
 }
 
-// Check-in modal
-function CheckInModal({ profile, currentWeek, onSave, onClose }) {
-  const milestone = profile.milestones?.find(m => m.week === currentWeek) || {}
-  const [bw, setBw] = useState('')
-  const [measures, setMeasures] = useState({})
-  const [lifts, setLifts] = useState({})
-
-  const save = () => {
-    onSave({
-      week: currentWeek,
-      date: new Date().toISOString(),
-      bodyweight: parseFloat(bw) || null,
-      measurements: Object.fromEntries(Object.entries(measures).map(([k,v]) => [k, parseFloat(v) || null])),
-      liftMaxes: Object.fromEntries(Object.entries(lifts).map(([k,v]) => [k, parseFloat(v) || null])),
-    })
-    onClose()
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, overflowY: 'auto' }}>
-      <div style={{ background: 'var(--bg2)', minHeight: '100%', padding: '20px 16px 40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2>Week {currentWeek} Check-In</h2>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <label>Bodyweight (target: {milestone.bodyweight} {profile.unit})</label>
-          <input className="input" type="number" inputMode="decimal" placeholder={String(milestone.bodyweight || '')} value={bw} onChange={e => setBw(e.target.value)} />
-        </div>
-
-        <div className="section-title">Measurements</div>
-        {Object.keys(MEASURE_LABELS).map(k => (
-          <div key={k} style={{ marginBottom: 14 }}>
-            <label>{MEASURE_LABELS[k]} (target: {milestone.measurements?.[k]} {profile.unit === 'kg' ? 'cm' : 'in'})</label>
-            <input className="input" type="number" inputMode="decimal" value={measures[k] || ''} onChange={e => setMeasures(p => ({...p, [k]: e.target.value}))} />
-          </div>
-        ))}
-
-        <div className="section-title" style={{ marginTop: 20 }}>Lift Maxes (1RM)</div>
-        {Object.keys(LIFT_LABELS).map(k => (
-          <div key={k} style={{ marginBottom: 14 }}>
-            <label>{LIFT_LABELS[k]} (target: {milestone.liftMaxes?.[k]} {profile.unit})</label>
-            <input className="input" type="number" inputMode="decimal" value={lifts[k] || ''} onChange={e => setLifts(p => ({...p, [k]: e.target.value}))} />
-          </div>
-        ))}
-
-        <button className="btn btn-primary btn-full" style={{ marginTop: 24 }} onClick={save}><IconCheck /> Save Check-In</button>
-      </div>
-    </div>
-  )
-}
-
-// ── Edit a single measurement or lift ─────────────────────────────────────────
-function EditMeasurementModal({ metric, label, currentValue, unit, onSave, onClose }) {
-  const [value, setValue] = useState('')
-  const save = () => {
-    const v = parseFloat(value)
-    if (isNaN(v) || v <= 0) return
-    onSave(metric, v)
-    onClose()
-  }
-  return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:300, display:'flex', alignItems:'flex-end' }}>
-      <div style={{ width:'100%', maxWidth:480, margin:'0 auto', background:'var(--bg2)', borderRadius:'16px 16px 0 0', padding:'24px 20px 36px' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-          <h3>Update {label}</h3>
-          <button className="btn btn-ghost" onClick={onClose} style={{ padding:'4px 12px' }}>✕</button>
-        </div>
-        <div style={{ fontSize:'0.875rem', color:'var(--text2)', marginBottom:12 }}>
-          Current: <strong>{currentValue} {unit}</strong>
-        </div>
-        <div className="input-unit" style={{ marginBottom:16 }}>
-          <input
-            className="input"
-            type="number"
-            inputMode="decimal"
-            placeholder={String(currentValue)}
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            autoFocus
-          />
-          <span>{unit}</span>
-        </div>
-        {value && parseFloat(value) > 0 && (
-          <div style={{ fontSize:'0.8rem', color: parseFloat(value) > currentValue ? 'var(--green)' : 'var(--red)', marginBottom:14 }}>
-            {parseFloat(value) > currentValue ? '▲' : '▼'} {Math.abs(parseFloat(value) - currentValue).toFixed(1)} {unit} from current
-          </div>
-        )}
-        <button className="btn btn-primary btn-full" onClick={save} disabled={!value || parseFloat(value) <= 0}>
-          <IconCheck /> Save Update
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // ── Measurement history mini-chart ────────────────────────────────────────────
 function HistorySparkline({ history, metric, color = 'var(--green)' }) {
@@ -294,10 +162,29 @@ function InsightsTab({ sessions, profile, measurementHistory }) {
   const u = profile.unit
 
   if (sessions.length === 0) {
-    return <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
-      <div style={{ fontSize: 40, marginBottom: 8 }}>📊</div>
-      Log a few workouts to unlock strength trends, plateau alerts and projections.
-    </div>
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <div style={{ fontSize: '3rem' }}>📈</div>
+        <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>No progress data yet</div>
+        <div style={{ color: 'var(--text2)', fontSize: '0.875rem', maxWidth: 300, lineHeight: 1.6 }}>
+          Log a few workouts and this tab will show your strength trends, PR history, plateau alerts, and projected gains.
+        </div>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 240 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', borderRadius: 10, padding: '10px 14px' }}>
+            <span style={{ fontSize: '1.25rem' }}>💪</span>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--text2)', textAlign: 'left' }}>Strength & 1RM trends</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', borderRadius: 10, padding: '10px 14px' }}>
+            <span style={{ fontSize: '1.25rem' }}>🏆</span>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--text2)', textAlign: 'left' }}>Personal record history</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', borderRadius: 10, padding: '10px 14px' }}>
+            <span style={{ fontSize: '1.25rem' }}>🔮</span>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--text2)', textAlign: 'left' }}>8-week strength projection</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

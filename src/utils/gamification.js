@@ -9,9 +9,12 @@ import { computeAchievements } from './achievements.js'
 
 // Coin value per earned achievement (by id; default 40)
 const ACHIEVEMENT_COINS = {
-  first_workout: 20, ten_sessions: 40, fifty_sessions: 100, hundred_sessions: 250,
-  streak_7: 60, streak_30: 200, bench_bw: 75, squat_1_5: 100, deadlift_2: 120,
-  pr_machine: 50, volume_week: 80, protein_streak: 50,
+  first_workout: 20, ten_sessions: 40, fifty_sessions: 100, hundred_sessions: 250, twohundred_sessions: 500,
+  streak_7: 60, streak_30: 200, streak_100: 600,
+  five_week: 50,
+  bench_bw: 75, bench_1_5: 200, squat_1_5: 100, squat_2: 250, deadlift_2: 120, deadlift_3: 400, ohp_bw: 150,
+  first_checkin: 15, pr_machine: 50,
+  volume_week: 80, protein_streak: 50, protein_week: 100,
 }
 
 // ── Level curve & titles ──────────────────────────────────────────────────────

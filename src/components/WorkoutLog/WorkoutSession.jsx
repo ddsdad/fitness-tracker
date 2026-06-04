@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useStore } from '../../store/useStore.js'
-import { EXERCISES, searchExercises } from '../../data/exercises.js'
+import { EXERCISES } from '../../data/exercises.js'
 import { MUSCLE_GROUPS } from '../../data/muscles.js'
 import { epley1RM } from '../../utils/calculations.js'
 import { postSessionFeedback } from '../../utils/coach.js'
-import { IconPlus, IconX, IconCheck, IconTimer, IconTrash, IconChevronLeft } from '../shared/Icons.jsx'
+import { IconPlus, IconCheck, IconTrash, IconChevronLeft } from '../shared/Icons.jsx'
+import ExercisePicker from './ExercisePicker.jsx'
+import SetRow from './SetRow.jsx'
+import RestTimer from './RestTimer.jsx'
 
 function genId() { return Math.random().toString(36).slice(2) }
 
@@ -108,206 +111,6 @@ export function planExercisesToSession(planExercises) {
   })
 }
 
-// ── Rest Timer ────────────────────────────────────────────────────────────────
-function RestTimer({ seconds, onDone }) {
-  const [remaining, setRemaining] = useState(seconds)
-  const [running, setRunning] = useState(true)
-  const ref = useRef()
-
-  useEffect(() => {
-    if (!running) return
-    ref.current = setInterval(() => {
-      setRemaining(r => {
-        if (r <= 1) { clearInterval(ref.current); onDone?.(); return 0 }
-        return r - 1
-      })
-    }, 1000)
-    return () => clearInterval(ref.current)
-  }, [running])
-
-  const mins = Math.floor(remaining / 60)
-  const secs = remaining % 60
-  const low  = remaining <= 10
-
-  return (
-    <div style={{ background: low ? 'rgba(34,197,94,0.12)' : 'var(--bg3)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, transition: 'background 0.2s' }}>
-      <IconTimer />
-      <span style={{ fontWeight: 700, fontSize: '1.25rem', fontVariantNumeric: 'tabular-nums', color: low ? 'var(--green)' : 'var(--text)' }}>
-        {mins}:{String(secs).padStart(2, '0')}
-      </span>
-      <button onClick={() => setRemaining(r => Math.max(0, r - 15))} style={{ background: 'var(--bg4)', border: 'none', borderRadius: 6, padding: '4px 8px', color: 'var(--text2)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}>−15</button>
-      <button onClick={() => setRemaining(r => r + 15)} style={{ background: 'var(--bg4)', border: 'none', borderRadius: 6, padding: '4px 8px', color: 'var(--text2)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}>+15</button>
-      <span style={{ flex: 1 }} />
-      <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.8125rem' }} onClick={() => setRunning(r => !r)}>
-        {running ? 'Pause' : 'Resume'}
-      </button>
-      <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.8125rem', color: 'var(--red)' }} onClick={onDone}>Skip</button>
-    </div>
-  )
-}
-
-// ── Exercise picker modal ─────────────────────────────────────────────────────
-const MUSCLE_OPTIONS = Object.keys(MUSCLE_GROUPS)
-function ExercisePicker({ onSelect, onClose }) {
-  const { customExercises, addCustomExercise } = useStore()
-  const [query, setQuery] = useState('')
-  const [creating, setCreating] = useState(false)
-  // form state
-  const [cName, setCName]   = useState('')
-  const [cPrim, setCPrim]   = useState('chest')
-  const [cEquip, setCEquip] = useState('barbell')
-  const [cCat, setCCat]     = useState('compound')
-
-  const all = [...customExercises, ...EXERCISES]
-  const results = query.length > 1
-    ? all.filter(e => e.name.toLowerCase().includes(query.toLowerCase()))
-    : all
-
-  const createAndSelect = () => {
-    if (!cName.trim()) return
-    const ex = { id: 'custom_' + Math.random().toString(36).slice(2,9), name: cName.trim(), primary: cPrim, secondary: [], category: cCat, equipment: cEquip, custom: true, notes: '' }
-    addCustomExercise(ex)
-    onSelect(ex)
-  }
-
-  if (creating) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 210, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ background: 'var(--bg2)', flex: 1, marginTop: 'auto', borderRadius: '20px 20px 0 0', maxHeight: '85vh', overflowY: 'auto', padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3>New Custom Exercise</h3>
-            <button className="btn btn-ghost" style={{ padding: 8 }} onClick={() => setCreating(false)}><IconX /></button>
-          </div>
-          <label>Name</label>
-          <input className="input" value={cName} onChange={e => setCName(e.target.value)} placeholder="e.g. Smith Machine Press" autoFocus style={{ marginBottom: 12 }} />
-          <label>Primary muscle</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-            {MUSCLE_OPTIONS.map(m => (
-              <button key={m} onClick={() => setCPrim(m)} style={{ padding: '5px 10px', borderRadius: 999, border: `1px solid ${cPrim === m ? 'var(--green)' : 'var(--border)'}`, background: cPrim === m ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: cPrim === m ? 'var(--green)' : 'var(--text2)', fontSize: '0.7rem', cursor: 'pointer' }}>{MUSCLE_GROUPS[m].label}</button>
-            ))}
-          </div>
-          <label>Equipment</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-            {['barbell','dumbbell','machine','cable','bodyweight','bands','kettlebell'].map(eq => (
-              <button key={eq} onClick={() => setCEquip(eq)} style={{ padding: '5px 10px', borderRadius: 999, border: `1px solid ${cEquip === eq ? 'var(--green)' : 'var(--border)'}`, background: cEquip === eq ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: cEquip === eq ? 'var(--green)' : 'var(--text2)', fontSize: '0.7rem', cursor: 'pointer', textTransform: 'capitalize' }}>{eq}</button>
-            ))}
-          </div>
-          <label>Type</label>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-            {['compound','isolation'].map(c => (
-              <button key={c} onClick={() => setCCat(c)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: `1px solid ${cCat === c ? 'var(--green)' : 'var(--border)'}`, background: cCat === c ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: cCat === c ? 'var(--green)' : 'var(--text2)', textTransform: 'capitalize', cursor: 'pointer' }}>{c}</button>
-            ))}
-          </div>
-          <button className="btn btn-primary btn-full" onClick={createAndSelect} disabled={!cName.trim()}>Create & Add</button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: 'var(--bg2)', flex: 1, display: 'flex', flexDirection: 'column', marginTop: 'auto', borderRadius: '20px 20px 0 0', maxHeight: '85vh' }}>
-        <div style={{ padding: '16px 16px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h3>Select Exercise</h3>
-            <button className="btn btn-ghost" style={{ padding: 8 }} onClick={onClose}><IconX /></button>
-          </div>
-          <input className="input" placeholder="Search exercises..." value={query} onChange={e => setQuery(e.target.value)} autoFocus />
-          <button className="btn btn-secondary btn-full" style={{ marginTop: 8 }} onClick={() => { setCName(query); setCreating(true) }}>
-            <IconPlus /> Create custom exercise
-          </button>
-        </div>
-        <div style={{ overflowY: 'auto', padding: '12px 16px 32px' }}>
-          {results.map(ex => (
-            <button key={ex.id} onClick={() => onSelect(ex)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ color: 'var(--text)', fontWeight: 500 }}>{ex.name}</div>
-                <div style={{ fontSize: '0.8125rem', color: 'var(--text3)' }}>
-                  {MUSCLE_GROUPS[ex.primary]?.label}
-                  {ex.secondary?.length > 0 && ` · ${ex.secondary.slice(0, 2).map(m => MUSCLE_GROUPS[m]?.label).filter(Boolean).join(', ')}`}
-                </div>
-              </div>
-              <span className={`badge ${ex.category === 'compound' ? 'badge-blue' : 'badge-green'}`} style={{ fontSize: '0.6875rem' }}>
-                {ex.category}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Set row ───────────────────────────────────────────────────────────────────
-const SET_TYPES = ['normal', 'drop', 'amrap', 'failure']
-const SET_TYPE_META = {
-  normal:  { color: 'var(--text3)' },
-  drop:    { label: 'D', color: 'var(--blue)',   title: 'Drop set' },
-  amrap:   { label: 'A', color: 'var(--green)',  title: 'AMRAP (as many reps as possible)' },
-  failure: { label: 'F', color: 'var(--red)',    title: 'To failure' },
-}
-function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, suggestedWeight, showPlates, unit = 'kg' }) {
-  const plates = showPlates && set.weight > 0 ? platesPerSide(set.weight, unit) : null
-  const type = set.type || 'normal'
-  const meta = SET_TYPE_META[type]
-  const cycleType = () => { if (set.warmup) return; const i = SET_TYPES.indexOf(type); onUpdate({ ...set, type: SET_TYPES[(i + 1) % SET_TYPES.length] }) }
-  return (
-    <>
-    <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', marginBottom: plates ? 2 : 8 }}>
-      <button onClick={cycleType} title={set.warmup ? 'Warm-up' : (meta.title || 'Tap to tag set type')}
-        style={{ background: 'none', border: 'none', cursor: set.warmup ? 'default' : 'pointer', color: set.warmup ? 'var(--yellow)' : meta.color, fontSize: '0.8125rem', textAlign: 'center', fontWeight: (set.warmup || type !== 'normal') ? 700 : 400, padding: 0 }}>
-        {set.warmup ? 'W' : (meta.label || idx + 1)}
-      </button>
-
-      {/* Weight */}
-      <div className="input-unit" style={{ position: 'relative' }}>
-        <input
-          className="input"
-          type="number" inputMode="decimal"
-          placeholder={suggestedWeight ? String(suggestedWeight) : '0'}
-          value={set.weight || ''}
-          style={{ padding: '8px 36px 8px 10px', fontSize: '0.9375rem', background: set.done ? 'rgba(34,197,94,0.08)' : undefined }}
-          onChange={e => onUpdate({ ...set, weight: Math.min(2000, Math.max(0, parseFloat(e.target.value) || 0)) })}
-        />
-        <span style={{ right: 8, fontSize: '0.75rem', position: 'absolute', top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }}>{unit}</span>
-      </div>
-
-      {/* Reps */}
-      <input
-        className="input"
-        type="number" inputMode="numeric"
-        placeholder="0"
-        value={set.reps || ''}
-        style={{ padding: '8px 10px', fontSize: '0.9375rem', textAlign: 'center', background: set.done ? 'rgba(34,197,94,0.08)' : undefined }}
-        onChange={e => onUpdate({ ...set, reps: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
-      />
-
-      {/* Rest */}
-      <input
-        className="input"
-        type="number" inputMode="numeric"
-        placeholder="90"
-        value={set.restSeconds || ''}
-        style={{ padding: '8px 10px', fontSize: '0.9375rem', textAlign: 'center' }}
-        onChange={e => onUpdate({ ...set, restSeconds: parseInt(e.target.value) || 90 })}
-      />
-
-      {/* Done */}
-      <button
-        style={{ width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: set.done ? 'var(--green)' : 'var(--bg4)', color: set.done ? '#000' : 'var(--text2)', transition: 'all 0.15s' }}
-        onClick={() => onSetComplete(set)}
-      >
-        <IconCheck />
-      </button>
-    </div>
-    {plates && (
-      <div style={{ gridColumn: '2 / 5', fontSize: '0.7rem', color: 'var(--text3)', marginBottom: 8, paddingLeft: 4 }}>
-        🏋️ Per side: {plates.length ? plates.map(p => `${p}`).join(' + ') + ` ${unit}` : `just the bar (${plateConfig(unit).bar}${unit})`}
-      </div>
-    )}
-    </>
-  )
-}
 
 // ── Single exercise block ─────────────────────────────────────────────────────
 function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, isView, unit = 'kg' }) {
@@ -523,8 +326,9 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
   const [startTime]             = useState(new Date())
   const [saving, setSaving]     = useState(false)
   const [feedback, setFeedback] = useState(null)
+  const [editing, setEditing]   = useState(false)
 
-  const isView = mode === 'view'
+  const isView = mode === 'view' && !editing
 
   const addExercise = (ex) => {
     const lastPerf = getLastPerf(ex.id, sessions)
@@ -595,6 +399,26 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
     }
   }
 
+  // ── Save edits back onto an existing logged session (preserves id & date) ──────
+  const commitEdit = () => {
+    if (!initialSession) return
+    const exercisesWithE1RM = exercises.map(ex => ({ ...ex, bestE1RM: bestE1RM(ex.sets) }))
+    updateSession(initialSession.id, {
+      name: name || 'Workout',
+      exercises: exercisesWithE1RM,
+      totalVolume: calcVolume(exercises),
+      estimatedTUT: calcTUT(exercises),
+    })
+    setEditing(false)
+    onDone()
+  }
+
+  const cancelEdit = () => {
+    setExercises(buildInitialExercises())
+    setName(initialSession?.name || '')
+    setEditing(false)
+  }
+
   // Post-session coach feedback overlay
   if (feedback) {
     return (
@@ -650,7 +474,10 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
           />
         )}
         {isView && (
-          <button className="btn btn-ghost" style={{ padding: 8, color: 'var(--red)' }} onClick={handleDelete}><IconTrash /></button>
+          <>
+            <button className="btn btn-ghost" style={{ padding: 8, fontSize: '1.1rem' }} onClick={() => setEditing(true)} aria-label="Edit workout">✏️</button>
+            <button className="btn btn-ghost" style={{ padding: 8, color: 'var(--red)' }} onClick={handleDelete}><IconTrash /></button>
+          </>
         )}
       </div>
 
@@ -707,9 +534,9 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
             {exercises.reduce((s,e) => s + e.sets.length, 0)} sets complete
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-secondary" style={{ flex: '0 0 auto' }} onClick={onDone}>Cancel</button>
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={saveSession} disabled={exercises.length === 0 || saving}>
-              <IconCheck /> Finish &amp; Save
+            <button className="btn btn-secondary" style={{ flex: '0 0 auto' }} onClick={editing ? cancelEdit : onDone}>Cancel</button>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={editing ? commitEdit : saveSession} disabled={exercises.length === 0 || saving}>
+              <IconCheck /> {editing ? 'Save Changes' : 'Finish & Save'}
             </button>
           </div>
         </div>

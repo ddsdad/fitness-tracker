@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Large source data files (Excel DBs used by import scripts — not needed in repo)
+extra info/

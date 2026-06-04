@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore.js'
+import { sanitize } from '../../utils/sanitize.js'
 
 const ACTIVITY = [
   { id: 'sedentary',   label: 'Sedentary' },
@@ -12,7 +13,8 @@ const ACTIVITY = [
 export default function Settings({ onClose }) {
   const store = useStore()
   const { profile, setProfile, user, signOut, resetApp, convertAllUnits,
-          sessions, checkins, goals, nutritionLogs, measurementHistory, recipes } = store
+          sessions, checkins, goals, nutritionLogs, measurementHistory, recipes,
+          customExercises, routines } = store
 
   const [name, setName]       = useState(profile?.name || '')
   const [age, setAge]         = useState(profile?.age || '')
@@ -24,13 +26,13 @@ export default function Settings({ onClose }) {
   const save = () => {
     const curUnit = profile?.unit || 'kg'
     // Save non-weight fields keeping the current unit; conversion handles the unit switch
-    setProfile({ ...profile, name, age: parseInt(age) || profile?.age, gender, activityLevel: activity, unit: curUnit })
+    setProfile({ ...profile, name: sanitize(name), age: parseInt(age) || profile?.age, gender, activityLevel: activity, unit: curUnit })
     if (unit !== curUnit) convertAllUnits(unit)   // converts every stored weight & length
     setSaved(true); setTimeout(() => setSaved(false), 1500)
   }
 
   const exportData = () => {
-    const payload = { exportedAt: new Date().toISOString(), profile, sessions, checkins, goals, nutritionLogs, measurementHistory, recipes }
+    const payload = { exportedAt: new Date().toISOString(), profile, sessions, checkins, goals, nutritionLogs, measurementHistory, recipes, customExercises, routines }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -109,10 +111,25 @@ export default function Settings({ onClose }) {
         <div className="section">
           <div className="section-title">Data</div>
           <div className="card">
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginBottom: 4 }}>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text2)', marginBottom: 8 }}>
               {sessions.length} workouts · {checkins.length} check-ins · {recipes.length} recipes
             </div>
-            <button className="btn btn-secondary btn-full" style={{ marginTop: 10 }} onClick={exportData}>⬇ Export Backup (JSON)</button>
+            {(() => {
+              try {
+                const keys = ['ft_profile','ft_sessions','ft_checkins','ft_goals','ft_nutrition','ft_measurements','ft_recipes','ft_custom_exercises','ft_routines']
+                const bytes = keys.reduce((t, k) => t + (localStorage.getItem(k) || '').length, 0)
+                const mb = (bytes / 1024 / 1024).toFixed(2)
+                const pct = Math.round(bytes / (5 * 1024 * 1024) * 100)
+                const warn = bytes > 4 * 1024 * 1024
+                return (
+                  <div style={{ fontSize: '0.75rem', color: warn ? 'var(--red)' : 'var(--text3)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {warn && <span>⚠️</span>}
+                    <span>Local storage: {mb} MB used ({pct}% of ~5 MB limit){warn ? ' — export a backup soon.' : ''}</span>
+                  </div>
+                )
+              } catch { return null }
+            })()}
+            <button className="btn btn-secondary btn-full" onClick={exportData}>⬇ Export Backup (JSON)</button>
           </div>
         </div>
 

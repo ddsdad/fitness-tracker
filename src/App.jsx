@@ -11,9 +11,13 @@ import Recommendations from './components/Recommendations/Recommendations.jsx'
 import Nutrition from './components/Nutrition/Nutrition.jsx'
 import Nav from './components/shared/Nav.jsx'
 import AuthGate from './components/Auth/AuthGate.jsx'
+import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
+import { useDeviceType } from './utils/useDeviceType.js'
 
 function AppInner() {
-  const { profile, setProfile, loaded, user, syncStatus, signOut } = useStore()
+  const { profile, setProfile, loaded, user, syncStatus, syncFailCount, retrySync, signOut } = useStore()
+  const device = useDeviceType()
+  const isDesktop = device === 'desktop'
   const [tab, setTab]                   = useState('dashboard')
   const [preloadedPlan, setPreloadedPlan] = useState(null)
   const [skippedAuth, setSkippedAuth]   = useState(() => !!localStorage.getItem('ft_auth_skipped'))
@@ -35,6 +39,11 @@ function AppInner() {
     document.documentElement.style.setProperty('--green-dim', t.dim)
     document.documentElement.style.setProperty('--accent', t.color)
   }, [profile?.game?.theme])
+
+  // Flag the layout mode on <html> so CSS (backdrop, framing) can respond
+  useEffect(() => {
+    document.documentElement.dataset.device = device
+  }, [device])
 
   // Loading spinner
   if (!loaded) {
@@ -77,28 +86,45 @@ function AppInner() {
         <div style={{
           position:'fixed', top:0, left:'50%', transform:'translateX(-50%)',
           width:'100%', maxWidth:480, zIndex:200,
-          background:'rgba(239,68,68,0.15)', borderBottom:'1px solid rgba(239,68,68,0.35)',
-          padding:'4px 16px', fontSize:'0.7rem', color:'var(--red)',
+          background: syncFailCount >= 3 ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.15)',
+          borderBottom:'1px solid rgba(239,68,68,0.35)',
+          padding:'6px 16px', fontSize:'0.7rem', color:'var(--red)',
           display:'flex', alignItems:'center', gap:6,
         }}>
-          ⚠️ Sync failed — saved on this device, will retry.
+          <span style={{ flex: 1 }}>
+            {syncFailCount >= 3
+              ? `⚠️ Sync failing (${syncFailCount}×) — your data is safe on this device.`
+              : '⚠️ Sync failed — saved on this device.'}
+          </span>
+          <button
+            onClick={retrySync}
+            style={{ background:'rgba(239,68,68,0.2)', border:'1px solid rgba(239,68,68,0.4)', borderRadius:6, color:'var(--red)', fontSize:'0.7rem', padding:'2px 8px', cursor:'pointer', fontWeight:600 }}
+          >
+            Retry
+          </button>
         </div>
       )}
 
-      {tab === 'dashboard'  && <Dashboard onSignOut={signOut} onNavigate={setTab} onStartSession={handleStartSession} />}
-      {tab === 'workout'    && (
-        <WorkoutLog
-          onNavigate={setTab}
-          preloadedPlan={preloadedPlan}
-          onPreloadConsumed={() => setPreloadedPlan(null)}
-        />
-      )}
-      {tab === 'progress'   && <Progress />}
-      {tab === 'goals'      && <Goals />}
-      {tab === 'recommend'  && <Recommendations onStartSession={handleStartSession} />}
-      {tab === 'nutrition'  && <Nutrition />}
+      {/* Desktop sidebar nav is portaled to <body> (see Nav.jsx) so the #root
+          transform that constrains modals doesn't displace it. */}
+      {isDesktop && <Nav active={tab} onNavigate={setTab} variant="desktop" />}
 
-      <Nav active={tab} onNavigate={setTab} />
+      {tab === 'dashboard'  && <ErrorBoundary fallbackLabel="Dashboard"><Dashboard onSignOut={signOut} onNavigate={setTab} onStartSession={handleStartSession} /></ErrorBoundary>}
+      {tab === 'workout'    && (
+        <ErrorBoundary fallbackLabel="Workout">
+          <WorkoutLog
+            onNavigate={setTab}
+            preloadedPlan={preloadedPlan}
+            onPreloadConsumed={() => setPreloadedPlan(null)}
+          />
+        </ErrorBoundary>
+      )}
+      {tab === 'progress'   && <ErrorBoundary fallbackLabel="Progress"><Progress /></ErrorBoundary>}
+      {tab === 'goals'      && <ErrorBoundary fallbackLabel="Goals"><Goals /></ErrorBoundary>}
+      {tab === 'recommend'  && <ErrorBoundary fallbackLabel="Recommendations"><Recommendations onStartSession={handleStartSession} /></ErrorBoundary>}
+      {tab === 'nutrition'  && <ErrorBoundary fallbackLabel="Nutrition"><Nutrition /></ErrorBoundary>}
+
+      {!isDesktop && <Nav active={tab} onNavigate={setTab} />}
     </>
   )
 }
