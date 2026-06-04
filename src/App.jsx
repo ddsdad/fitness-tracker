@@ -13,14 +13,34 @@ import Nav from './components/shared/Nav.jsx'
 import AuthGate from './components/Auth/AuthGate.jsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
 import { useDeviceType } from './utils/useDeviceType.js'
+import { computeHunter, RANKS } from './utils/hunter.js'
+import AriseOverlay from './components/Hunter/AriseOverlay.jsx'
 
 function AppInner() {
-  const { profile, setProfile, loaded, user, syncStatus, syncFailCount, retrySync, signOut } = useStore()
+  const { profile, setProfile, sessions, loaded, user, syncStatus, syncFailCount, retrySync, signOut } = useStore()
   const device = useDeviceType()
   const isDesktop = device === 'desktop'
   const [tab, setTab]                   = useState('dashboard')
   const [preloadedPlan, setPreloadedPlan] = useState(null)
   const [skippedAuth, setSkippedAuth]   = useState(() => !!localStorage.getItem('ft_auth_skipped'))
+  const [ariseRank, setAriseRank]       = useState(null)
+
+  // ── Hunter rank-up detection → ARISE cinematic ──
+  // Compares current rank index vs the highest the user has acknowledged.
+  useEffect(() => {
+    if (!profile || !loaded) return
+    const { rank } = computeHunter(profile, sessions || [])
+    const curIdx = RANKS.findIndex(r => r.tier === rank.tier)
+    const seenIdx = profile.game?.seenRankIdx
+    if (seenIdx === undefined) {
+      // First time we ever compute a rank for this profile → baseline silently,
+      // no cinematic (avoids firing for already-ranked existing users on load).
+      setProfile({ ...profile, game: { ...(profile.game || {}), seenRankIdx: curIdx } })
+    } else if (curIdx > seenIdx) {
+      setAriseRank(rank)
+      setProfile({ ...profile, game: { ...(profile.game || {}), seenRankIdx: curIdx } })
+    }
+  }, [profile, sessions, loaded]) // eslint-disable-line
 
   const handleStartSession = (planExercises) => {
     setPreloadedPlan(planExercises)
@@ -68,6 +88,9 @@ function AppInner() {
   return (
     <>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* Hunter rank-up cinematic */}
+      {ariseRank && <AriseOverlay rank={ariseRank} onClose={() => setAriseRank(null)} />}
 
       {/* Sync indicator strip */}
       {user && syncStatus === 'syncing' && (

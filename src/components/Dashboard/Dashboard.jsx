@@ -7,6 +7,7 @@ import { MUSCLE_GROUPS, RP_VOLUME } from '../../data/muscles.js'
 import { getCurrentWeek } from '../../utils/milestones.js'
 import { getWeekRange, weekRangeLabel, sessionsInWeek, muscleVolumeForSessions } from '../../utils/weekly.js'
 import WeeklySummary from './WeeklySummary.jsx'
+import HunterStatus from '../Hunter/HunterStatus.jsx'
 import { structuralRiskScore } from '../../utils/balance.js'
 import { getWeekScheduleData } from '../../utils/recommendations.js'
 import Compete from '../Compete/Compete.jsx'
@@ -240,12 +241,14 @@ export default function Dashboard({ onNavigate, onStartSession }) {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 20, gap: 2 }}>
-        {[['today','Today'],['heatmap','Heatmap'],['schedule','Schedule'],['compete','🏆'],['stats','Stats']].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '7px 4px', borderRadius: 999, border: 'none', cursor: 'pointer', background: tab === id ? 'var(--bg2)' : 'transparent', color: tab === id ? (id === 'compete' ? 'var(--green)' : 'var(--text)') : 'var(--text3)', fontWeight: tab === id ? 600 : 400, fontSize: '0.75rem', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+        {[['today','Today'],['status','⚔'],['heatmap','Heatmap'],['schedule','Sched'],['compete','🏆'],['stats','Stats']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '7px 4px', borderRadius: 999, border: 'none', cursor: 'pointer', background: tab === id ? 'var(--bg2)' : 'transparent', color: tab === id ? (id === 'compete' ? 'var(--green)' : id === 'status' ? '#38bdf8' : 'var(--text)') : 'var(--text3)', fontWeight: tab === id ? 600 : 400, fontSize: '0.75rem', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
             {label}
           </button>
         ))}
       </div>
+
+      {tab === 'status' && <HunterStatus />}
 
       {tab === 'today'    && <Today embedded onNavigate={onNavigate} onStartSession={onStartSession} />}
       {tab === 'stats'    && <BodyStatsPanel profile={profile} />}
