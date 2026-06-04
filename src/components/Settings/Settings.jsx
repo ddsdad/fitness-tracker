@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore.js'
 import { sanitize } from '../../utils/sanitize.js'
+import { FIBER_PROFILES } from '../../utils/weekPlanner.js'
 
 const ACTIVITY = [
   { id: 'sedentary',   label: 'Sedentary' },
@@ -101,6 +102,20 @@ export default function Settings({ onClose }) {
                 {ACTIVITY.map(a => (
                   <button key={a.id} onClick={() => setActivity(a.id)} style={{ padding: '7px 10px', borderRadius: 999, border: `1px solid ${activity === a.id ? 'var(--green)' : 'var(--border)'}`, background: activity === a.id ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', color: activity === a.id ? 'var(--green)' : 'var(--text2)', fontSize: '0.75rem', cursor: 'pointer' }}>{a.label}</button>
                 ))}
+              </div>
+            </Field>
+            <Field label="Training response (volume tolerance)">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {Object.values(FIBER_PROFILES).map(f => {
+                  const active = (profile?.fiberType || 'balanced') === f.id
+                  return (
+                    <button key={f.id} onClick={() => setProfile({ ...profile, fiberType: f.id })}
+                      style={{ textAlign: 'left', padding: '9px 12px', borderRadius: 8, border: `1px solid ${active ? 'var(--green)' : 'var(--border)'}`, background: active ? 'rgba(34,197,94,0.1)' : 'var(--bg3)', cursor: 'pointer' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: active ? 700 : 600, color: active ? 'var(--green)' : 'var(--text)' }}>{f.emoji} {f.label}</div>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text3)', marginTop: 2, lineHeight: 1.4 }}>{f.desc}</div>
+                    </button>
+                  )
+                })}
               </div>
             </Field>
             <button className="btn btn-primary btn-full" style={{ marginTop: 4 }} onClick={save}>{saved ? '✓ Saved' : 'Save Profile'}</button>

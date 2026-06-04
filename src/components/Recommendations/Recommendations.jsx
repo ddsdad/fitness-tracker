@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../../store/useStore.js'
-import { getRecommendations, getWeeklyChallengeData, detectDeloadNeed, SESSION_TYPES, EQUIPMENT_PROFILES } from '../../utils/recommendations.js'
+import { getRecommendations, getWeeklyChallengeData, detectDeloadNeed, SESSION_TYPES, EQUIPMENT_PROFILES, currentWeekVolume } from '../../utils/recommendations.js'
 import { MUSCLE_GROUPS } from '../../data/muscles.js'
 import { EXERCISES, EQUIPMENT_EMOJI, EQUIPMENT_LABELS } from '../../data/exercises.js'
 import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
 import { getRegion, getEmphasis, weeklyDelta, groupedAlternatives, represcribe, suggestComplementary, analyzeCoverage } from '../../utils/variations.js'
-import { getMuscleVolume } from '../../utils/heatmap.js'
 import { detectTrainingLevel } from '../../utils/milestones.js'
 import Program from '../Program/Program.jsx'
 import { getProgramStatus } from '../../utils/program.js'
+import WeekPlanner from './WeekPlanner.jsx'
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 function Badge({ children, color = 'var(--green)' }) {
@@ -71,9 +71,9 @@ function SessionTypePicker({ selected, onChange }) {
 }
 
 // ── Weekly challenge bars ─────────────────────────────────────────────────────
-function WeeklyChallenge({ sessions, goals, goalId }) {
+function WeeklyChallenge({ sessions, goals, goalId, profile }) {
   const [open, setOpen] = useState(true)
-  const data = getWeeklyChallengeData(sessions, Object.keys(goals).length ? goals : null, goalId)
+  const data = getWeeklyChallengeData(sessions, Object.keys(goals).length ? goals : null, goalId, profile)
   const done    = data.filter(m => m.done).length
   const total   = data.length
   const overallPct = total > 0 ? Math.round(data.reduce((s, m) => s + m.pct, 0) / total) : 0
@@ -730,8 +730,8 @@ export default function Recommendations({ onStartSession }) {
 
   const sessionType = SESSION_TYPES[sessionTypeId]
 
-  // Weekly volume + training level for Smart Session Rebuild
-  const weeklyVolume = useMemo(() => getMuscleVolume(sessions, 7), [sessions])
+  // Weekly volume + training level for Smart Session Rebuild (current program week)
+  const weeklyVolume = useMemo(() => currentWeekVolume(sessions, profile), [sessions, profile])
   const bwKg = profile.unit === 'kg' ? profile.bodyweight : profile.bodyweight / 2.2046
   const levelName = detectTrainingLevel(profile.liftMaxes, bwKg)
   const userLevel = { untrained: 1, novice: 1, intermediate: 2, advanced: 3 }[levelName] || 2
@@ -790,6 +790,9 @@ export default function Recommendations({ onStartSession }) {
         </div>
       )}
 
+      {/* Optimal rest-of-week volume allocation */}
+      <WeekPlanner />
+
       {/* Session type picker */}
       <SessionTypePicker selected={sessionTypeId} onChange={setSessionTypeId} />
 
@@ -807,7 +810,7 @@ export default function Recommendations({ onStartSession }) {
       </div>
 
       {/* Weekly challenge gamification */}
-      <WeeklyChallenge sessions={sessions} goals={goals} goalId={profile.physiqueGoal || 'overall_size'} />
+      <WeeklyChallenge sessions={sessions} goals={goals} goalId={profile.physiqueGoal || 'overall_size'} profile={profile} />
 
       {/* Volume focus banner */}
       <div style={{

@@ -1,6 +1,17 @@
 import { getMuscleVolume, getMuscleStatus } from './heatmap.js'
 import { MUSCLE_GROUPS, GOAL_MUSCLE_WEIGHTS, RP_VOLUME } from '../data/muscles.js'
 import { EXERCISES } from '../data/exercises.js'
+import { getCurrentWeek, getWeekRange, sessionsInWeek, muscleVolumeForSessions } from './weekly.js'
+
+// Working-set volume per muscle for the CURRENT program week (anchored to the
+// user's start date). Falls back to a rolling 7-day window if no program start
+// is set. This replaces the old always-rolling getMuscleVolume(sessions, 7),
+// which kept counting last week's sessions at the start of a new week.
+export function currentWeekVolume(sessions, profile) {
+  if (!profile?.startDate) return getMuscleVolume(sessions, 7)
+  const week = getCurrentWeek(profile.startDate)
+  return muscleVolumeForSessions(sessionsInWeek(sessions, profile.startDate, week))
+}
 
 // ── Session type definitions ──────────────────────────────────────────────────
 export const SESSION_TYPES = {
@@ -419,8 +430,8 @@ function buildReasoning(split, scoreMap, sessionType) {
 }
 
 // ── Gamification: weekly challenge data ───────────────────────────────────────
-export function getWeeklyChallengeData(sessions, customWeights, goalId = 'overall_size') {
-  const volume7     = getMuscleVolume(sessions, 7)
+export function getWeeklyChallengeData(sessions, customWeights, goalId = 'overall_size', profile = null) {
+  const volume7     = profile ? currentWeekVolume(sessions, profile) : getMuscleVolume(sessions, 7)
   const goalWeights = GOAL_MUSCLE_WEIGHTS[goalId] || GOAL_MUSCLE_WEIGHTS.overall_size
 
   return Object.keys(MUSCLE_GROUPS)
@@ -450,7 +461,9 @@ export function getWeeklyChallengeData(sessions, customWeights, goalId = 'overal
 export function getRecommendations(sessions, profile, customWeights = null, sessionTypeId = 'standard') {
   const goalId      = profile?.physiqueGoal || 'overall_size'
   const sessionType = SESSION_TYPES[sessionTypeId] || SESSION_TYPES.standard
-  const volume7     = getMuscleVolume(sessions, 7)
+  // Current PROGRAM-WEEK volume (not a rolling 7-day window) so plans reflect
+  // what you've done THIS week, not leftovers from last week.
+  const volume7     = currentWeekVolume(sessions, profile)
 
   // Smart score map combining deficit × slider priority × recovery
   const scoreMap = buildSmartScoreMap(sessions, volume7, customWeights, goalId)
