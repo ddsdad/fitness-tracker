@@ -3,11 +3,14 @@ import { v4 as uuid } from 'uuid'
 import { useStore } from '../../store/useStore.js'
 import { FOODS, FOOD_CATEGORIES, searchFoods, getFoodMacros, proteinQualityLabel, nutrientChips } from '../../data/foods.js'
 import {
-  calculateTDEE, calculateMacroTargets, getFoodRecommendations,
-  generateMealPlan, sumLogMacros, macroRemaining, EXTRA_ACTIVITIES, activityBurn,
-  getMacroCoaching, getSmartPicks, findClosestFoods, detectFoodPatterns, calorieCalibration, DIET_OPTIONS,
+  calculateTDEE, calculateMacroTargets,
+  sumLogMacros, macroRemaining, EXTRA_ACTIVITIES, activityBurn,
+  getMacroCoaching, calorieCalibration, DIET_OPTIONS,
   adaptiveTDEE, effectiveTDEE, mealProteinCheck,
 } from '../../utils/nutrition.js'
+import {
+  getFoodRecommendations, generateMealPlan, getSmartPicks, findClosestFoods, detectFoodPatterns,
+} from '../../utils/mealPlanner.js'
 import { IconPlus, IconX, IconCheck, IconFlame } from '../shared/Icons.jsx'
 import FoodPickerModal from './FoodPickerModal.jsx'
 

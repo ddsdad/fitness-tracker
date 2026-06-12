@@ -4,24 +4,11 @@ import { getProgramStatus, SPLIT_META, splitVariant, generateProgramWorkout, rea
 import { calculateTDEE, calculateMacroTargets, sumLogMacros, adaptiveTDEE, effectiveTDEE } from '../../utils/nutrition.js'
 import { computePRs } from '../../utils/analytics.js'
 import { gameStats } from '../../utils/gamification.js'
-import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
+import { currentStreak } from '../../utils/streak.js'
+import { planExercisesToSession } from '../../utils/planSession.js'
 import SystemPanel from './SystemPanel.jsx'
 
 const TODAY = new Date().toISOString().slice(0, 10)
-
-function calcStreak(sessions, shieldDates = []) {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const set = new Set(sessions.map(s => { const d = new Date(s.date); d.setHours(0,0,0,0); return d.getTime() }))
-  const shields = new Set(shieldDates.map(ds => { const d = new Date(ds + 'T00:00:00'); d.setHours(0,0,0,0); return d.getTime() }))
-  const covered = (t) => set.has(t) || shields.has(t)
-  let streak = 0, check = new Date(today)
-  for (let i = 0; i < 365; i++) {
-    if (covered(check.getTime())) { streak++; check.setDate(check.getDate() - 1) }
-    else if (i === 0) check.setDate(check.getDate() - 1)
-    else break
-  }
-  return streak
-}
 
 function Ring({ pct, color, size = 64, children }) {
   const r = (size - 8) / 2, c = 2 * Math.PI * r
@@ -65,7 +52,7 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
   const pLeft = Math.max(0, targets.protein - consumed.protein)
 
   // ── Streak + next PR ──
-  const streak = calcStreak(sessions, profile?.game?.shieldDates || [])
+  const streak = currentStreak(sessions, profile?.game?.shieldDates || [])
   const { feed } = useMemo(() => computePRs(sessions), [sessions])
   const lastPR = feed[0]
   const u = profile?.unit || 'kg'

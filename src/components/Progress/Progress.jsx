@@ -7,6 +7,7 @@ import { dotsScore, dotsTier, bigThreeTotalKg, acwr } from '../../utils/strength
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { IconPlus, IconCheck, IconArrowDown } from '../shared/Icons.jsx'
 import { e1rmTrend, topTrackedExercises, detectPlateau, weeklyVolumeSeries, bestWorstWeeks, gainRate, projectStrength, computePRs, exerciseDetail } from '../../utils/analytics.js'
+import { currentStreak } from '../../utils/streak.js'
 import CheckInModal from './CheckInModal.jsx'
 import EditMeasurementModal from './EditMeasurementModal.jsx'
 import ExerciseDetailModal from './ExerciseDetailModal.jsx'
@@ -51,24 +52,10 @@ function RepMaxCalc({ unit }) {
 }
 
 
-// ── Streak calculation ────────────────────────────────────────────────────────
-function calcStreak(sessions) {
+// ── Streak calculation (shared shield-aware streak + weekly stats) ────────────
+function calcStreak(sessions, shieldDates = []) {
   if (!sessions.length) return { current: 0, thisWeek: 0, avg30: 0 }
-  const sorted = [...sessions].sort((a, b) => new Date(b.date) - new Date(a.date))
   const today = new Date(); today.setHours(0,0,0,0)
-
-  // Current day streak
-  let streak = 0
-  let check = new Date(today)
-  for (let i = 0; i < 90; i++) {
-    const ds = check.toDateString()
-    if (sorted.some(s => new Date(s.date).toDateString() === ds)) {
-      streak++
-      check.setDate(check.getDate() - 1)
-    } else if (i === 0) { // Today has no session yet — don't break streak
-      check.setDate(check.getDate() - 1)
-    } else break
-  }
 
   // Sessions this week (Mon–Sun)
   const weekStart = new Date(today)
@@ -79,7 +66,7 @@ function calcStreak(sessions) {
   const cutoff30 = new Date(); cutoff30.setDate(cutoff30.getDate() - 30)
   const avg30 = +(sessions.filter(s => new Date(s.date) >= cutoff30).length / 4.3).toFixed(1)
 
-  return { current: streak, thisWeek, avg30 }
+  return { current: currentStreak(sessions, shieldDates), thisWeek, avg30 }
 }
 
 const LIFT_LABELS = { squat: 'Squat', bench: 'Bench', deadlift: 'Deadlift', row: 'Row', ohp: 'OHP' }
@@ -384,7 +371,7 @@ export default function Progress() {
   }) || []
 
   const latestCheckin = checkins.length > 0 ? checkins[checkins.length - 1] : null
-  const streak = calcStreak(sessions)
+  const streak = calcStreak(sessions, profile?.game?.shieldDates || [])
 
   // Flags
   const flags = []

@@ -25,6 +25,11 @@ export default function HunterStatus() {
 
   const { stats, power, rank, next, progressToNext, strongest, weakest, className, powerLevel } = h
 
+  // Weekly growth vs the snapshot App.jsx refreshes every 7 days
+  const snap = profile.game?.hunterSnap
+  const delta = (k) => (snap?.stats ? stats[k] - snap.stats[k] : 0)
+  const powerDelta = snap ? power - snap.power : 0
+
   return (
     <div style={{ paddingBottom: 8 }}>
       {/* ── Hero: rank + power level ── */}
@@ -47,6 +52,7 @@ export default function HunterStatus() {
             <div style={{ marginTop: 8, fontSize: '0.62rem', color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Power Level</div>
             <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#eaf6ff', lineHeight: 1, textShadow: `0 0 16px ${ACCENT}66` }}>
               {powerLevel.toLocaleString()}
+              {powerDelta > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--green)', marginLeft: 8, fontWeight: 800 }}>▲ +{powerDelta} this week</span>}
             </div>
           </div>
         </div>
@@ -85,6 +91,11 @@ export default function HunterStatus() {
               <span style={{ fontSize: '1rem' }}>{a.icon}</span>
               <span style={{ fontWeight: 700, fontSize: '0.82rem', color: a.color }}>{a.key}</span>
               <span style={{ fontSize: '0.78rem', color: 'var(--text2)' }}>{a.name}</span>
+              {delta(a.key) !== 0 && (
+                <span style={{ fontSize: '0.64rem', fontWeight: 800, color: delta(a.key) > 0 ? 'var(--green)' : 'var(--red)' }}>
+                  {delta(a.key) > 0 ? '▲' : '▼'}{Math.abs(delta(a.key))}
+                </span>
+              )}
               <span style={{ marginLeft: 'auto', fontWeight: 800, color: a.color }}>{stats[a.key]}</span>
             </div>
             <div style={{ height: 6, borderRadius: 999, background: 'var(--bg4)', overflow: 'hidden' }}>

@@ -8,6 +8,7 @@ import { IconPlus, IconCheck, IconTrash, IconChevronLeft } from '../shared/Icons
 import ExercisePicker from './ExercisePicker.jsx'
 import SetRow from './SetRow.jsx'
 import RestTimer from './RestTimer.jsx'
+import ShadowDuel from './ShadowDuel.jsx'
 
 function genId() { return Math.random().toString(36).slice(2) }
 
@@ -18,7 +19,7 @@ function calcVolume(exercises) {
 function calcTUT(exercises) {
   return exercises.reduce((s, ex) => {
     const ex_ = EXERCISES.find(e => e.id === ex.exerciseId)
-    const tutPerRep = ex_?.tut_per_rep || 3
+    const tutPerRep = ex_?.tut || 3
     return s + ex.sets.reduce((ss, set) => ss + set.reps * tutPerRep, 0)
   }, 0)
 }
@@ -91,26 +92,6 @@ function progressionSuggestion(lastSets) {
   return { lastWeight, suggestedWeight: +suggestedWeight.toFixed(1), avgReps: +avgReps.toFixed(1) }
 }
 
-// ── Convert plan exercises (from Recommendations) to session format ────────────
-export function planExercisesToSession(planExercises) {
-  return planExercises.map(planEx => {
-    const repsStr    = String(planEx.reps || '8')
-    const repsTarget = parseInt(repsStr.split('–')[0] || repsStr.split('-')[0] || '8')
-    const restSecs   = planEx.category === 'compound' ? 180 : 90
-    return {
-      id:               genId(),
-      exerciseId:       planEx.id,
-      name:             planEx.name,
-      primaryMuscle:    planEx.primary,
-      secondaryMuscles: planEx.secondary || [],
-      sets: Array.from({ length: planEx.sets || 3 }, () => ({
-        id: genId(), weight: 0, reps: repsTarget, restSeconds: restSecs, done: false,
-      })),
-      _prescribedReps: repsStr,
-    }
-  })
-}
-
 
 // ── Single exercise block ─────────────────────────────────────────────────────
 function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, isView, unit = 'kg' }) {
@@ -181,6 +162,9 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
         </div>
         {!isView && <button className="btn btn-ghost" style={{ padding: 6, color: 'var(--red)', flexShrink: 0 }} onClick={onDelete}><IconTrash /></button>}
       </div>
+
+      {/* Shadow Duel — live battle vs your previous performance */}
+      {!isView && <ShadowDuel sets={exercise.sets} ghostSets={lastPerf?.sets} unit={unit} />}
 
       {/* Previous performance + progression hint */}
       {lastPerfSummary && (

@@ -1,6 +1,26 @@
 import { useState, useEffect, useRef } from 'react'
 import { IconTimer } from '../shared/Icons.jsx'
 
+// Audible + haptic "rest over" cue — phone can be face-down between sets.
+function notifyRestOver() {
+  try { navigator.vibrate?.([200, 100, 200]) } catch {}
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    const ctx = new Ctx()
+    const play = (freq, at, dur = 0.18) => {
+      const o = ctx.createOscillator(), g = ctx.createGain()
+      o.connect(g); g.connect(ctx.destination)
+      o.type = 'sine'; o.frequency.value = freq
+      g.gain.setValueAtTime(0.25, ctx.currentTime + at)
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + at + dur)
+      o.start(ctx.currentTime + at); o.stop(ctx.currentTime + at + dur)
+    }
+    play(880, 0); play(1175, 0.22)            // two rising chimes
+    setTimeout(() => ctx.close().catch(() => {}), 800)
+  } catch {}
+}
+
 export default function RestTimer({ seconds, onDone }) {
   const [remaining, setRemaining] = useState(seconds)
   const [running, setRunning] = useState(true)
@@ -10,7 +30,7 @@ export default function RestTimer({ seconds, onDone }) {
     if (!running) return
     ref.current = setInterval(() => {
       setRemaining(r => {
-        if (r <= 1) { clearInterval(ref.current); onDone?.(); return 0 }
+        if (r <= 1) { clearInterval(ref.current); notifyRestOver(); onDone?.(); return 0 }
         return r - 1
       })
     }, 1000)

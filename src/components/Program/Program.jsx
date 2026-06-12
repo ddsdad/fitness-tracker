@@ -5,7 +5,7 @@ import {
   generateProgramWorkout, SPLIT_META,
   resolveWeekSchedule,
 } from '../../utils/program.js'
-import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
+import { planExercisesToSession } from '../../utils/planSession.js'
 import { MUSCLE_GROUPS } from '../../data/muscles.js'
 import { getWeekRange, getCurrentWeek, sessionsInWeek } from '../../utils/weekly.js'
 

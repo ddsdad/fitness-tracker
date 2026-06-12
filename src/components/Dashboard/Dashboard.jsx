@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { useStore } from '../../store/useStore.js'
-import Body3D from './Body3D.jsx'
+// three.js + react-three are ~1MB — only load them when the heatmap tab renders
+const Body3D = lazy(() => import('./Body3D.jsx'))
 import BodyStatsPanel from './BodyStatsPanel.jsx'
 import { getMuscleVolume, getMuscleStatus, getMuscleDetail } from '../../utils/heatmap.js'
 import { MUSCLE_GROUPS, RP_VOLUME } from '../../data/muscles.js'
@@ -25,9 +26,9 @@ const MUSCLE_SPLIT_COLOR = {
   abs:'#f59e0b',                                                                       // core → amber
 }
 
-function WeekSchedule({ sessions }) {
+function WeekSchedule({ sessions, profile }) {
   const [selectedDay, setSelectedDay] = useState(null)
-  const days = getWeekScheduleData(sessions)
+  const days = getWeekScheduleData(sessions, profile?.startDate)
 
   // Week date range label
   const from = days[0].date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -312,13 +313,19 @@ export default function Dashboard({ onNavigate, onStartSession }) {
 
           {/* 3D body heatmap */}
           <div className="card" style={{ marginBottom: 16, padding: 0, overflow: 'hidden' }}>
-            <Body3D
-              muscleVolume={muscleVolume}
-              goalId={goalId}
-              customWeights={customWeights}
-              activeMuscle={activeMuscle}
-              onMuscleClick={m => setActiveMuscle(m === activeMuscle ? null : m)}
-            />
+            <Suspense fallback={
+              <div style={{ height: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text3)', fontSize: '0.8rem' }}>
+                <span style={{ fontSize: '2rem' }}>🧍</span> Loading 3D body…
+              </div>
+            }>
+              <Body3D
+                muscleVolume={muscleVolume}
+                goalId={goalId}
+                customWeights={customWeights}
+                activeMuscle={activeMuscle}
+                onMuscleClick={m => setActiveMuscle(m === activeMuscle ? null : m)}
+              />
+            </Suspense>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 10, padding: '12px 16px', flexWrap: 'wrap' }}>
               {LEGEND.map(l => (
                 <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>

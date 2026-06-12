@@ -1,15 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useStore } from './store/useStore.js'
 import { THEMES } from './utils/gamification.js'
 import { StoreProvider } from './store/StoreProvider.jsx'
-import Onboarding from './components/Onboarding/Onboarding.jsx'
 import Dashboard from './components/Dashboard/Dashboard.jsx'
-import WorkoutLog from './components/WorkoutLog/WorkoutLog.jsx'
-import Progress from './components/Progress/Progress.jsx'
-import Goals from './components/Goals/Goals.jsx'
-import Recommendations from './components/Recommendations/Recommendations.jsx'
-import Nutrition from './components/Nutrition/Nutrition.jsx'
 import Nav from './components/shared/Nav.jsx'
+
+// Code-split every non-default tab so the initial bundle stays small — heavy
+// dependencies (recharts, the food DB, the workout logger) load on demand.
+const Onboarding      = lazy(() => import('./components/Onboarding/Onboarding.jsx'))
+const WorkoutLog      = lazy(() => import('./components/WorkoutLog/WorkoutLog.jsx'))
+const Progress        = lazy(() => import('./components/Progress/Progress.jsx'))
+const Goals           = lazy(() => import('./components/Goals/Goals.jsx'))
+const Recommendations = lazy(() => import('./components/Recommendations/Recommendations.jsx'))
+const Nutrition       = lazy(() => import('./components/Nutrition/Nutrition.jsx'))
+
+function TabFallback() {
+  return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60dvh' }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--bg3)', borderTop: '3px solid var(--green)', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  )
+}
 import AuthGate from './components/Auth/AuthGate.jsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
 import { useDeviceType } from './utils/useDeviceType.js'
@@ -25,21 +37,30 @@ function AppInner() {
   const [skippedAuth, setSkippedAuth]   = useState(() => !!localStorage.getItem('ft_auth_skipped'))
   const [ariseRank, setAriseRank]       = useState(null)
 
-  // ── Hunter rank-up detection → ARISE cinematic ──
-  // Compares current rank index vs the highest the user has acknowledged.
+  // ── Hunter rank-up detection → ARISE cinematic + weekly stat snapshot ──
   useEffect(() => {
     if (!profile || !loaded) return
-    const { rank } = computeHunter(profile, sessions || [])
-    const curIdx = RANKS.findIndex(r => r.tier === rank.tier)
-    const seenIdx = profile.game?.seenRankIdx
+    const h = computeHunter(profile, sessions || [])
+    const curIdx = RANKS.findIndex(r => r.tier === h.rank.tier)
+    const game = profile.game || {}
+    const updates = {}
+
+    const seenIdx = game.seenRankIdx
     if (seenIdx === undefined) {
-      // First time we ever compute a rank for this profile → baseline silently,
-      // no cinematic (avoids firing for already-ranked existing users on load).
-      setProfile({ ...profile, game: { ...(profile.game || {}), seenRankIdx: curIdx } })
+      // First compute for this profile → baseline silently (no false cinematic).
+      updates.seenRankIdx = curIdx
     } else if (curIdx > seenIdx) {
-      setAriseRank(rank)
-      setProfile({ ...profile, game: { ...(profile.game || {}), seenRankIdx: curIdx } })
+      setAriseRank(h.rank)
+      updates.seenRankIdx = curIdx
     }
+
+    // Weekly attribute snapshot → powers the "+STR this week" deltas on Status.
+    const snap = game.hunterSnap
+    if (!snap || Date.now() - snap.ts > 7 * 86_400_000) {
+      updates.hunterSnap = { ts: Date.now(), stats: h.stats, power: h.power }
+    }
+
+    if (Object.keys(updates).length) setProfile({ ...profile, game: { ...game, ...updates } })
   }, [profile, sessions, loaded]) // eslint-disable-line
 
   const handleStartSession = (planExercises) => {
@@ -82,7 +103,7 @@ function AppInner() {
 
   // Onboarding — shown if profile not set up yet
   if (!profile) {
-    return <Onboarding onComplete={setProfile} />
+    return <Suspense fallback={<TabFallback />}><Onboarding onComplete={setProfile} /></Suspense>
   }
 
   return (
@@ -132,20 +153,22 @@ function AppInner() {
           transform that constrains modals doesn't displace it. */}
       {isDesktop && <Nav active={tab} onNavigate={setTab} variant="desktop" />}
 
-      {tab === 'dashboard'  && <ErrorBoundary fallbackLabel="Dashboard"><Dashboard onSignOut={signOut} onNavigate={setTab} onStartSession={handleStartSession} /></ErrorBoundary>}
-      {tab === 'workout'    && (
-        <ErrorBoundary fallbackLabel="Workout">
-          <WorkoutLog
-            onNavigate={setTab}
-            preloadedPlan={preloadedPlan}
-            onPreloadConsumed={() => setPreloadedPlan(null)}
-          />
-        </ErrorBoundary>
-      )}
-      {tab === 'progress'   && <ErrorBoundary fallbackLabel="Progress"><Progress /></ErrorBoundary>}
-      {tab === 'goals'      && <ErrorBoundary fallbackLabel="Goals"><Goals /></ErrorBoundary>}
-      {tab === 'recommend'  && <ErrorBoundary fallbackLabel="Recommendations"><Recommendations onStartSession={handleStartSession} /></ErrorBoundary>}
-      {tab === 'nutrition'  && <ErrorBoundary fallbackLabel="Nutrition"><Nutrition /></ErrorBoundary>}
+      <Suspense fallback={<TabFallback />}>
+        {tab === 'dashboard'  && <ErrorBoundary fallbackLabel="Dashboard"><Dashboard onSignOut={signOut} onNavigate={setTab} onStartSession={handleStartSession} /></ErrorBoundary>}
+        {tab === 'workout'    && (
+          <ErrorBoundary fallbackLabel="Workout">
+            <WorkoutLog
+              onNavigate={setTab}
+              preloadedPlan={preloadedPlan}
+              onPreloadConsumed={() => setPreloadedPlan(null)}
+            />
+          </ErrorBoundary>
+        )}
+        {tab === 'progress'   && <ErrorBoundary fallbackLabel="Progress"><Progress /></ErrorBoundary>}
+        {tab === 'goals'      && <ErrorBoundary fallbackLabel="Goals"><Goals /></ErrorBoundary>}
+        {tab === 'recommend'  && <ErrorBoundary fallbackLabel="Recommendations"><Recommendations onStartSession={handleStartSession} /></ErrorBoundary>}
+        {tab === 'nutrition'  && <ErrorBoundary fallbackLabel="Nutrition"><Nutrition /></ErrorBoundary>}
+      </Suspense>
 
       {!isDesktop && <Nav active={tab} onNavigate={setTab} />}
     </>

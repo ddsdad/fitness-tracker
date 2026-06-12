@@ -325,10 +325,12 @@ export function StoreProvider({ children }) {
     else if (item.kind === 'shield')  { game.shields = (game.shields || 0) + 1; message = `🛡️ Streak Shield added (${game.shields} owned)` }
     else if (item.kind === 'mystery') { const box = openMysteryBox(); game.questCoins = (game.questCoins || 0) + box.amount; message = `🎁 ${box.label === 'JACKPOT 🎉' ? box.label + ' ' : 'You won '}${box.amount} coins!` }
     else if (item.kind === 'cookbook') {
-      const recs = buildCookbookRecipes(item.pack)
-      recs.forEach(r => storage.addRecipe(r))
-      const all = storage.getRecipes(); setRecipesState(all); push(uid => saveRecipes(uid, all))
-      game.owned = [...owned, item.id]; message = `${recs.length} recipes added to your cookbook!`
+      // builder is async (lazy-loads the food DB); recipes land a beat later
+      buildCookbookRecipes(item.pack).then(recs => {
+        recs.forEach(r => storage.addRecipe(r))
+        const all = storage.getRecipes(); setRecipesState(all); push(uid => saveRecipes(uid, all))
+      }).catch(e => console.warn('[cookbook]', e))
+      game.owned = [...owned, item.id]; message = 'Recipes added to your cookbook!'
     }
     setProfile({ ...p, game })
     return { ok: true, message }

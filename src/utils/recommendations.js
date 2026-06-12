@@ -575,19 +575,25 @@ export function detectDeloadNeed(sessions) {
 
 // ── Weekly schedule data ──────────────────────────────────────────────────────
 /**
- * Returns an array of 7 day objects (Mon–Sun of the current week).
+ * Returns an array of 7 day objects for the CURRENT PROGRAM WEEK (anchored to
+ * the user's start date, so "day 1" is whatever weekday they began on). Falls
+ * back to a Mon–Sun calendar week when no start date exists.
  * Each day has:  date, dayLabel, isToday, isPast, sessions[], muscleGroups[]
  */
-export function getWeekScheduleData(sessions) {
-  const today   = new Date(); today.setHours(0,0,0,0)
-  const dow     = today.getDay()                          // 0=Sun
-  const monday  = new Date(today)
-  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1))
+export function getWeekScheduleData(sessions, startDate = null) {
+  const today = new Date(); today.setHours(0,0,0,0)
 
-  const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  let weekStart
+  if (startDate) {
+    weekStart = getWeekRange(startDate, getCurrentWeek(startDate)).start
+  } else {
+    const dow = today.getDay()                            // 0=Sun
+    weekStart = new Date(today)
+    weekStart.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1))
+  }
 
   return Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(monday); date.setDate(monday.getDate() + i)
+    const date = new Date(weekStart); date.setDate(weekStart.getDate() + i)
     const dateStr = date.toISOString().split('T')[0]
     const isToday = date.getTime() === today.getTime()
     const isPast  = date < today
@@ -599,6 +605,6 @@ export function getWeekScheduleData(sessions) {
     const totalVolume = daySessions.reduce((s, sess) => s + (sess.totalVolume || 0), 0)
     const totalMins   = daySessions.reduce((s, sess) => s + (sess.duration || 0), 0)
 
-    return { date, dateStr, dayLabel: DAY_LABELS[i], isToday, isPast, sessions: daySessions, muscleGroups, totalVolume, totalMins }
+    return { date, dateStr, dayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }), isToday, isPast, sessions: daySessions, muscleGroups, totalVolume, totalMins }
   })
 }

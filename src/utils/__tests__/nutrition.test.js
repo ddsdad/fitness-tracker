@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   calculateBMR, calculateMacroTargets, calculateTDEE,
-  dietaryFilter, findClosestFoods, getSmartPicks,
-  adaptiveTDEE, effectiveTDEE, calorieCalibration, mealProteinCheck, generateMealPlan,
+  dietaryFilter,
+  adaptiveTDEE, effectiveTDEE, calorieCalibration, mealProteinCheck,
 } from '../nutrition.js'
+import { findClosestFoods, getSmartPicks, generateMealPlan } from '../mealPlanner.js'
 
 describe('BMR & macro targets', () => {
   it('Mifflin-St Jeor for a male', () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { deriveEarned, gameStats, levelFromXp, levelTitle, dailyQuests, buildCookbookRecipes, openMysteryBox } from '../gamification.js'
+import { deriveEarned, gameStats, levelFromXp, levelTitle, buildCookbookRecipes, openMysteryBox } from '../gamification.js'
+import { generateSystemQuests } from '../system.js'
 import { computePRs, exerciseDetail, detectPlateau, projectStrength } from '../analytics.js'
 
 const profile = { bodyweight: 82, unit: 'kg', liftMaxes: { bench: 100, squat: 140, deadlift: 180 }, game: {} }
@@ -36,13 +37,22 @@ describe('coin earning', () => {
   })
 })
 
-describe('daily quests', () => {
-  it('are stable for a given date', () => {
-    expect(dailyQuests('2026-05-26', 80).map(q => q.id)).toEqual(dailyQuests('2026-05-26', 80).map(q => q.id))
+describe('System daily quests', () => {
+  it('are deterministic for a given date', () => {
+    const a = generateSystemQuests('2026-05-26', sessions, profile, 80).quests.map(q => q.id)
+    const b = generateSystemQuests('2026-05-26', sessions, profile, 80).quests.map(q => q.id)
+    expect(a).toEqual(b)
+    expect(a.length).toBeGreaterThanOrEqual(3)
   })
-  it('switch to recovery quests when readiness is low', () => {
-    const low = dailyQuests('2026-05-26', 30).map(q => q.id)
-    expect(low.some(id => ['walk', 'stretch', 'sleep', 'hydrate'].includes(id))).toBe(true)
+  it('drops the hard overload quest when readiness is low', () => {
+    const low = generateSystemQuests('2026-05-26', sessions, profile, 30).quests
+    expect(low.some(q => q.kind === 'overload')).toBe(false)
+  })
+  it('issues a history-based overload quest when readiness is fine', () => {
+    const qs = generateSystemQuests('2026-05-26', sessions, profile, 80).quests
+    const o = qs.find(q => q.kind === 'overload')
+    expect(o).toBeTruthy()
+    expect(o.target.exerciseId).toBe('bench')   // pulled from real logged history
   })
 })
 
@@ -50,8 +60,8 @@ describe('shop', () => {
   it('mystery box always returns a positive reward', () => {
     for (let i = 0; i < 20; i++) expect(openMysteryBox().amount).toBeGreaterThan(0)
   })
-  it('cookbook builds recipes with computed macros', () => {
-    const recs = buildCookbookRecipes('bulk')
+  it('cookbook builds recipes with computed macros (async — lazy food DB)', async () => {
+    const recs = await buildCookbookRecipes('bulk')
     expect(recs.length).toBeGreaterThan(0)
     recs.forEach(r => { expect(r.perServing.kcal).toBeGreaterThan(0); expect(r.ingredients.length).toBeGreaterThan(0) })
   })

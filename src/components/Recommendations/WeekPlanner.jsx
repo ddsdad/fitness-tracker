@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore.js'
 import { planRestOfWeek, buildDayWorkout, FIBER_PROFILES } from '../../utils/weekPlanner.js'
-import { planExercisesToSession } from '../WorkoutLog/WorkoutSession.jsx'
+import { planExercisesToSession } from '../../utils/planSession.js'
 
 // ── Compact "rest of week" optimal allocation card ────────────────────────────
 export default function WeekPlanner({ onStartSession }) {

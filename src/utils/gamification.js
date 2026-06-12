@@ -3,7 +3,6 @@
 //  Earnings are DERIVED from logged data (cheat-resistant, recomputable),
 //  plus a small action-based bucket for completed quests.
 // ════════════════════════════════════════════════════════════════════════════
-import { FOOD_INDEX, getFoodMacros } from '../data/foods.js'
 import { epley1RM } from './calculations.js'
 import { computeAchievements } from './achievements.js'
 
@@ -118,36 +117,7 @@ export function gameStats(profile, sessions, measurementHistory, nutritionLogs) 
   }
 }
 
-// ── Daily quests (seeded by date, readiness-aware) ────────────────────────────
-const QUEST_POOL = [
-  { id: 'log_workout',  icon: '🏋️', text: 'Log a workout today',                 reward: 25, hard: true },
-  { id: 'protein',      icon: '🥩', text: 'Hit your protein target today',        reward: 20 },
-  { id: 'protein_plus', icon: '💥', text: 'Overload: hit 1.2× your protein',      reward: 30, hard: true },
-  { id: 'cardio',       icon: '🏃', text: '20-minute cardio (run/bike/row)',      reward: 25, hard: true },
-  { id: 'finisher',     icon: '🔥', text: 'Bonus finisher: 100 push-ups',         reward: 30, hard: true },
-  { id: 'weighin',      icon: '⚖️', text: 'Log your morning weigh-in',            reward: 10 },
-  { id: 'beat_set',     icon: '📈', text: 'Beat a previous set on any lift',      reward: 35, hard: true },
-  { id: 'veg',          icon: '🥦', text: 'Eat 2+ servings of veg today',         reward: 15 },
-]
-const RECOVERY_POOL = [
-  { id: 'walk',     icon: '🚶', text: '15-minute easy walk',         reward: 15 },
-  { id: 'stretch',  icon: '🧘', text: '10-minute mobility / stretch', reward: 15 },
-  { id: 'sleep',    icon: '😴', text: 'Get 8 hours of sleep tonight', reward: 20 },
-  { id: 'hydrate',  icon: '💧', text: 'Drink 3L of water today',      reward: 10 },
-  { id: 'weighin',  icon: '⚖️', text: 'Log your morning weigh-in',    reward: 10 },
-  { id: 'protein',  icon: '🥩', text: 'Hit your protein target today', reward: 20 },
-]
-function seededShuffle(arr, seed) {
-  const a = [...arr]; let s = seed
-  for (let i = a.length - 1; i > 0; i--) { s = (s * 9301 + 49297) % 233280; const j = Math.floor(s / 233280 * (i + 1));[a[i], a[j]] = [a[j], a[i]] }
-  return a
-}
-export function dailyQuests(dateStr, readinessScore = null) {
-  const seed = [...dateStr].reduce((h, c) => h + c.charCodeAt(0), 0)
-  // Low readiness → recovery-focused quests (fair to recovery state)
-  const pool = (readinessScore != null && readinessScore < 45) ? RECOVERY_POOL : QUEST_POOL
-  return seededShuffle(pool, seed).slice(0, 3)
-}
+// (old random dailyQuests removed — superseded by utils/system.js generateSystemQuests)
 
 // ── Mystery box (variable reward) ─────────────────────────────────────────────
 export function openMysteryBox() {
@@ -206,7 +176,10 @@ const COOKBOOKS = {
     { name: 'Doro Wat Bowl', emoji: '🍲', servings: 1, ing: [['doro_wat', 200], ['injera', 120]] },
   ],
 }
-export function buildCookbookRecipes(pack) {
+// Async: the 1,300-item food DB is dynamic-imported here so it stays out of
+// the eager bundle (cookbooks are only built on a rare shop purchase).
+export async function buildCookbookRecipes(pack) {
+  const { FOOD_INDEX, getFoodMacros } = await import('../data/foods.js')
   const defs = COOKBOOKS[pack] || []
   return defs.map(def => {
     const ingredients = def.ing
