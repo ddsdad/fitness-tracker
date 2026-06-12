@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useStore } from '../../store/useStore.js'
 import { getProgramStatus, SPLIT_META, splitVariant, generateProgramWorkout, readinessAdjustment } from '../../utils/program.js'
-import { calculateTDEE, calculateMacroTargets, sumLogMacros, adaptiveTDEE, effectiveTDEE } from '../../utils/nutrition.js'
+import { calculateTDEE, calculateMacroTargets, adaptiveTDEE, effectiveTDEE } from '../../utils/nutrition.js'
 import { computePRs } from '../../utils/analytics.js'
 import { gameStats } from '../../utils/gamification.js'
 import { currentStreak } from '../../utils/streak.js'
@@ -9,20 +9,6 @@ import { planExercisesToSession } from '../../utils/planSession.js'
 import SystemPanel from './SystemPanel.jsx'
 
 const TODAY = new Date().toISOString().slice(0, 10)
-
-function Ring({ pct, color, size = 64, children }) {
-  const r = (size - 8) / 2, c = 2 * Math.PI * r
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg4)" strokeWidth={5} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={5} strokeLinecap="round"
-          strokeDasharray={`${Math.min(1, pct) * c} ${c}`} style={{ transition: 'stroke-dasharray 0.5s' }} />
-      </svg>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>{children}</div>
-    </div>
-  )
-}
 
 export default function Today({ onNavigate, onStartSession, embedded = false }) {
   const { profile, sessions, nutritionLogs, measurementHistory, useStreakShield, markLevelSeen } = useStore()
@@ -47,9 +33,6 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
   const effT = effectiveTDEE(tdee.total, adaptive)
   const nutritionGoal = (profile?.caloricMode === 'cut' || profile?.physiqueGoal === 'lean_athletic') ? 'fat_loss' : profile?.physiqueGoal === 'stronger_legs' ? 'strength' : 'muscle'
   const targets = calculateMacroTargets(effT.value, nutritionGoal, bwKg, profile?.caloricMode || 'lean_bulk')
-  const consumed = sumLogMacros(todayLog.meals)
-  const kcalLeft = Math.max(0, targets.kcal - consumed.kcal)
-  const pLeft = Math.max(0, targets.protein - consumed.protein)
 
   // ── Streak + next PR ──
   const streak = currentStreak(sessions, profile?.game?.shieldDates || [])
@@ -154,30 +137,22 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
         )}
       </div>
 
-      {/* ── Nutrition snapshot ── */}
+      {/* ── Fuel targets (logger removed — see Plan → Fuel for the full recommender) ── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nutrition</span>
-          <button onClick={() => onNavigate?.('nutrition')} style={{ fontSize: '0.72rem', padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: 'pointer' }}>+ Log food</button>
+          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fuel Targets</span>
+          <button onClick={() => onNavigate?.('recommend')} style={{ fontSize: '0.72rem', padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', cursor: 'pointer' }}>🥩 What to eat →</button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Ring pct={consumed.kcal / targets.kcal} color={consumed.kcal > targets.kcal ? '#f87171' : 'var(--green)'} size={72}>
-            <div style={{ fontWeight: 800, fontSize: '1rem', lineHeight: 1 }}>{kcalLeft}</div>
-            <div style={{ fontSize: '0.55rem', color: 'var(--text3)' }}>kcal left</div>
-          </Ring>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 4 }}>
-              <span style={{ color: 'var(--text2)' }}>Protein</span>
-              <span style={{ fontWeight: 700, color: pLeft > 0 ? 'var(--text)' : 'var(--green)' }}>{Math.round(consumed.protein)}/{targets.protein}g</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+          {[[targets.kcal, 'kcal'], [`${targets.protein}g`, 'protein'], [`${targets.carbs}g`, 'carbs'], [`${targets.fat}g`, 'fat']].map(([v, l]) => (
+            <div key={l} style={{ background: 'var(--bg3)', borderRadius: 10, padding: '8px 4px', textAlign: 'center' }}>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--green)' }}>{v}</div>
+              <div style={{ fontSize: '0.58rem', color: 'var(--text3)', textTransform: 'uppercase' }}>{l}</div>
             </div>
-            <div style={{ height: 6, background: 'var(--bg4)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
-              <div style={{ height: '100%', width: `${Math.min(100, consumed.protein/targets.protein*100)}%`, background: 'var(--green)', borderRadius: 3 }} />
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text3)' }}>
-              {pLeft > 0 ? `${Math.round(pLeft)}g protein to go` : 'Protein goal hit 💪'}
-              {effT.source !== 'estimate' && ` · adaptive TDEE ${effT.value}`}
-            </div>
-          </div>
+          ))}
+        </div>
+        <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 8 }}>
+          ~{Math.round(bwKg * 0.4)}g protein per main meal{effT.source !== 'estimate' && ` · adaptive TDEE ${effT.value}`}
         </div>
       </div>
 
@@ -210,7 +185,7 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
 
       {/* ── Nudges ── */}
       {!weighedToday && (
-        <div onClick={() => onNavigate?.('nutrition')} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 10, cursor: 'pointer' }}>
+        <div onClick={() => onNavigate?.('progress')} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 10, cursor: 'pointer' }}>
           <span>⚖️</span><div style={{ flex: 1, fontSize: '0.82rem', color: 'var(--text2)' }}>Log this morning's weigh-in to keep your trend & adaptive TDEE sharp.</div><span style={{ color: 'var(--text3)' }}>›</span>
         </div>
       )}

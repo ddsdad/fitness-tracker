@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveEarned, gameStats, levelFromXp, levelTitle, buildCookbookRecipes, openMysteryBox } from '../gamification.js'
+import { deriveEarned, gameStats, levelFromXp, levelTitle, openMysteryBox } from '../gamification.js'
 import { generateSystemQuests } from '../system.js'
 import { computePRs, exerciseDetail, detectPlateau, projectStrength } from '../analytics.js'
 
@@ -59,11 +59,6 @@ describe('System daily quests', () => {
 describe('shop', () => {
   it('mystery box always returns a positive reward', () => {
     for (let i = 0; i < 20; i++) expect(openMysteryBox().amount).toBeGreaterThan(0)
-  })
-  it('cookbook builds recipes with computed macros (async — lazy food DB)', async () => {
-    const recs = await buildCookbookRecipes('bulk')
-    expect(recs.length).toBeGreaterThan(0)
-    recs.forEach(r => { expect(r.perServing.kcal).toBeGreaterThan(0); expect(r.ingredients.length).toBeGreaterThan(0) })
   })
 })
 

@@ -59,7 +59,7 @@ const PLANNER_SPLITS = {
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x }
 
 // ── Main: plan the remaining days of the current program week ──────────────────
-export function planRestOfWeek(sessions, profile, customWeights = null, today = new Date()) {
+export function planRestOfWeek(sessions, profile, customWeights = null, today = new Date(), opts = {}) {
   if (!profile?.startDate) return null
   const goalId = profile.physiqueGoal || 'overall_size'
   const goalWeights = customWeights || GOAL_MUSCLE_WEIGHTS[goalId] || GOAL_MUSCLE_WEIGHTS.overall_size
@@ -121,14 +121,23 @@ export function planRestOfWeek(sessions, profile, customWeights = null, today = 
   // Greedy day-by-day allocation
   const days = []
   for (let d = todayIdx; d < totalDays; d++) {
-    // Score each split by weighted debt of its recovered, still-in-debt muscles
+    // User can pin today's split ("I want legs today") — the optimizer then
+    // allocates volume within that choice and re-plans the rest of the week.
+    const forced = d === todayIdx && opts.forceToday ? opts.forceToday : null
+
     let best = null, bestScore = 0
-    for (const [id, split] of Object.entries(PLANNER_SPLITS)) {
-      let score = 0
-      for (const m of split.muscles) {
-        if (debt[m] > 0 && headroom(m) > 0 && recovered(m, d)) score += debt[m] * goalW[m]
+    if (forced && forced !== 'rest' && PLANNER_SPLITS[forced]) {
+      best = { id: forced, ...PLANNER_SPLITS[forced] }
+      bestScore = 1
+    } else if (!forced) {
+      // Score each split by weighted debt of its recovered, still-in-debt muscles
+      for (const [id, split] of Object.entries(PLANNER_SPLITS)) {
+        let score = 0
+        for (const m of split.muscles) {
+          if (debt[m] > 0 && headroom(m) > 0 && recovered(m, d)) score += debt[m] * goalW[m]
+        }
+        if (score > bestScore) { bestScore = score; best = { id, ...split } }
       }
-      if (score > bestScore) { bestScore = score; best = { id, ...split } }
     }
 
     const date = new Date(start.getTime() + d * MS_DAY)

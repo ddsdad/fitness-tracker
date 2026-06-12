@@ -4,14 +4,20 @@ import { planRestOfWeek, buildDayWorkout, FIBER_PROFILES } from '../../utils/wee
 import { planExercisesToSession } from '../../utils/planSession.js'
 
 // ── Compact "rest of week" optimal allocation card ────────────────────────────
+const FORCE_CHOICES = [
+  ['push', '💪 Push'], ['pull', '🔙 Pull'], ['legs', '🦵 Legs'],
+  ['upper', '⬆️ Upper'], ['full_body', '🏋️ Full'], ['rest', '😴 Rest'],
+]
+
 export default function WeekPlanner({ onStartSession }) {
   const { profile, sessions, goals } = useStore()
   const [open, setOpen] = useState(true)
+  const [forceToday, setForceToday] = useState(null)   // pin today's split; rest of week re-plans
 
   const customWeights = goals && Object.keys(goals).length > 0 ? goals : null
   const plan = useMemo(
-    () => planRestOfWeek(sessions, profile, customWeights),
-    [sessions, profile, customWeights]
+    () => planRestOfWeek(sessions, profile, customWeights, new Date(), { forceToday }),
+    [sessions, profile, customWeights, forceToday]
   )
   if (!plan) return null
 
@@ -46,8 +52,23 @@ export default function WeekPlanner({ onStartSession }) {
 
       {open && (
         <div style={{ padding: '0 16px 14px' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text2)', marginBottom: 12, lineHeight: 1.5 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text2)', marginBottom: 10, lineHeight: 1.5 }}>
             Optimal allocation of your remaining weekly volume across the days left — recalculated whenever you log or miss a day. Capped at each muscle's safe recoverable max.
+          </div>
+
+          {/* Pin today's split — optimizer re-plans the rest of the week around it */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.66rem', color: 'var(--text3)' }}>Today:</span>
+            <button onClick={() => setForceToday(null)}
+              style={{ padding: '4px 10px', borderRadius: 999, border: `1.5px solid ${!forceToday ? 'var(--green)' : 'var(--border)'}`, background: !forceToday ? 'rgba(34,197,94,0.12)' : 'var(--bg3)', color: !forceToday ? 'var(--green)' : 'var(--text2)', fontSize: '0.7rem', fontWeight: !forceToday ? 700 : 400, cursor: 'pointer' }}>
+              ✨ Auto
+            </button>
+            {FORCE_CHOICES.map(([id, label]) => (
+              <button key={id} onClick={() => setForceToday(id)}
+                style={{ padding: '4px 10px', borderRadius: 999, border: `1.5px solid ${forceToday === id ? 'var(--blue)' : 'var(--border)'}`, background: forceToday === id ? 'rgba(59,130,246,0.12)' : 'var(--bg3)', color: forceToday === id ? 'var(--blue)' : 'var(--text2)', fontSize: '0.7rem', fontWeight: forceToday === id ? 700 : 400, cursor: 'pointer' }}>
+                {label}
+              </button>
+            ))}
           </div>
 
           {/* Day plan strip */}

@@ -23,7 +23,8 @@ function RecapCard({ s, live }) {
           { v: s.sessionCount, l: 'sessions' },
           { v: volK, l: `${u} vol` },
           { v: s.prs?.length || 0, l: 'PRs' },
-          { v: `${s.proteinDays}/7`, l: 'protein' },
+          // protein chip only when there were actual food logs that week (logger removed)
+          ...(s.daysLogged > 0 ? [{ v: `${s.proteinDays}/7`, l: 'protein' }] : [{ v: s.onTrack?.length ?? 0, l: 'on track' }]),
         ].map(x => (
           <div key={x.l} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '8px 4px', textAlign: 'center' }}>
             <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--green)' }}>{x.v}</div>

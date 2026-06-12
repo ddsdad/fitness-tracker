@@ -12,7 +12,6 @@ const WorkoutLog      = lazy(() => import('./components/WorkoutLog/WorkoutLog.js
 const Progress        = lazy(() => import('./components/Progress/Progress.jsx'))
 const Goals           = lazy(() => import('./components/Goals/Goals.jsx'))
 const Recommendations = lazy(() => import('./components/Recommendations/Recommendations.jsx'))
-const Nutrition       = lazy(() => import('./components/Nutrition/Nutrition.jsx'))
 
 function TabFallback() {
   return (
@@ -167,7 +166,6 @@ function AppInner() {
         {tab === 'progress'   && <ErrorBoundary fallbackLabel="Progress"><Progress /></ErrorBoundary>}
         {tab === 'goals'      && <ErrorBoundary fallbackLabel="Goals"><Goals /></ErrorBoundary>}
         {tab === 'recommend'  && <ErrorBoundary fallbackLabel="Recommendations"><Recommendations onStartSession={handleStartSession} /></ErrorBoundary>}
-        {tab === 'nutrition'  && <ErrorBoundary fallbackLabel="Nutrition"><Nutrition /></ErrorBoundary>}
       </Suspense>
 
       {!isDesktop && <Nav active={tab} onNavigate={setTab} />}

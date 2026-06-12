@@ -144,9 +144,12 @@ export function splitVariant(schedule, dayInWeek) {
 //   today           Date (defaults to now)
 //
 // Returns { days[], dayInWeek, todaySplit, variant }
-// each day = { day, split, status } where status ∈
+// each day = { day, split, status, overridden? } where status ∈
 //   'completed' | 'missed' | 'rest_past' | 'today' | 'upcoming' | 'rest'
-export function resolveWeekSchedule(baseSchedule, weekStart, sessionsThisWeek = [], today = new Date()) {
+// `overrides` = { [dayIndex]: splitId } — user-forced splits ("actually I want
+// legs today"). Overridden training splits are claimed out of the remaining
+// queue so the rest of the week reflows around the user's choice.
+export function resolveWeekSchedule(baseSchedule, weekStart, sessionsThisWeek = [], today = new Date(), overrides = {}) {
   const start = new Date(weekStart); start.setHours(0, 0, 0, 0)
   const now = new Date(today); now.setHours(0, 0, 0, 0)
   const totalDays = baseSchedule.length
@@ -178,12 +181,23 @@ export function resolveWeekSchedule(baseSchedule, weekStart, sessionsThisWeek = 
   }
 
   // Today + future — distribute the remaining training sessions one per day,
-  // then fill any leftover days with rest.
+  // then fill any leftover days with rest. User overrides win their day and
+  // claim a matching slot from the queue (so it isn't scheduled twice).
   const remaining = trainingQueue.slice(consumed)
+  for (let d = dayInWeek; d < totalDays; d++) {
+    const ov = overrides[d]
+    if (ov && ov !== 'rest' && !(d === dayInWeek && loggedDays.has(d))) {
+      const i = remaining.indexOf(ov)
+      if (i !== -1) remaining.splice(i, 1)
+    }
+  }
   let ri = 0
   for (let d = dayInWeek; d < totalDays; d++) {
+    const ov = overrides[d]
     if (d === dayInWeek && loggedDays.has(d)) {
       days.push({ day: d, split: remaining[ri] ?? 'rest', status: 'completed' }); ri++
+    } else if (ov) {
+      days.push({ day: d, split: ov, status: d === dayInWeek ? 'today' : 'upcoming', overridden: true })
     } else if (ri < remaining.length) {
       days.push({ day: d, split: remaining[ri], status: d === dayInWeek ? 'today' : 'upcoming' }); ri++
     } else {

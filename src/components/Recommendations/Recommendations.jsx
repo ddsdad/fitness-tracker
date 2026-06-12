@@ -1,4 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, lazy, Suspense } from 'react'
+
+// Fuel panel lazy-loads the 1,300-item food DB only when expanded
+const FuelPanel = lazy(() => import('./FuelPanel.jsx'))
 import { useStore } from '../../store/useStore.js'
 import { getRecommendations, getWeeklyChallengeData, detectDeloadNeed, SESSION_TYPES, EQUIPMENT_PROFILES, currentWeekVolume } from '../../utils/recommendations.js'
 import { MUSCLE_GROUPS } from '../../data/muscles.js'
@@ -702,6 +705,28 @@ function WorkoutCard({ plan, defaultOpen, sessionTypeId, onStartSession, weeklyV
   )
 }
 
+// ── Fuel card shell (lazy body) ───────────────────────────────────────────────
+function FuelCard() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="card" style={{ marginBottom: 20, padding: 0, overflow: 'hidden', border: '1px solid rgba(34,197,94,0.25)' }}>
+      <div onClick={() => setOpen(o => !o)} style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: '1.25rem' }}>🥩</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.9375rem' }}>Fuel</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: 1 }}>What to eat today — periodized for training vs rest</div>
+        </div>
+        <span style={{ color: 'var(--text3)', fontSize: '0.75rem', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
+      </div>
+      {open && (
+        <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center', color: 'var(--text3)', fontSize: '0.8rem' }}>Loading fuel engine…</div>}>
+          <FuelPanel />
+        </Suspense>
+      )}
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Recommendations({ onStartSession }) {
   const { profile, sessions, goals } = useStore()
@@ -792,6 +817,9 @@ export default function Recommendations({ onStartSession }) {
 
       {/* Optimal rest-of-week volume allocation */}
       <WeekPlanner onStartSession={onStartSession} />
+
+      {/* FUEL — nutrition recommender (replaced the food-logger tab) */}
+      <FuelCard />
 
       {/* Session type picker */}
       <SessionTypePicker selected={sessionTypeId} onChange={setSessionTypeId} />

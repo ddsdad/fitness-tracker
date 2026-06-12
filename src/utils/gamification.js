@@ -149,49 +149,7 @@ export const SHOP = [
   { id: 'theme_neon',    kind: 'theme', themeId: 'neon',    name: 'Neon Mint theme',     emoji: '💚', price: 500 },
   { id: 'streak_shield', kind: 'shield', name: 'Streak Shield', emoji: '🛡️', price: 150, repeatable: true, desc: 'Protects your streak for one missed day' },
   { id: 'mystery',       kind: 'mystery', name: 'Mystery Box', emoji: '🎁', price: 150, repeatable: true, desc: 'Random reward — could be a jackpot!' },
-  { id: 'cookbook_bulk', kind: 'cookbook', pack: 'bulk',  name: 'High-Protein Bulk Cookbook', emoji: '📗', price: 500, desc: '4 calorie-dense muscle-building recipes' },
-  { id: 'cookbook_cut',  kind: 'cookbook', pack: 'cut',   name: 'Lean & Shredded Cookbook',   emoji: '📕', price: 500, desc: '4 high-volume low-cal recipes' },
-  { id: 'cookbook_hab',  kind: 'cookbook', pack: 'habesha',name: 'Habesha Gains Cookbook',    emoji: '📙', price: 600, desc: '3 high-protein habesha-inspired meals' },
   { id: 'title_machine', kind: 'title', title: 'The Machine', name: 'Title: "The Machine"', emoji: '🤖', price: 250 },
   { id: 'title_savage',  kind: 'title', title: 'Savage',      name: 'Title: "Savage"',      emoji: '😤', price: 250 },
 ]
 
-// ── Cookbook recipe definitions (built into real recipes on purchase) ─────────
-const COOKBOOKS = {
-  bulk: [
-    { name: 'Mass Gainer Oats', emoji: '🥣', servings: 1, ing: [['oatmeal', 100], ['banana', 120], ['peanut_butter', 32], ['whey_protein', 31]] },
-    { name: 'Steak & Rice Bowl', emoji: '🥩', servings: 1, ing: [['sirloin', 200], ['white_rice', 250], ['broccoli', 100], ['olive_oil', 10]] },
-    { name: 'Chicken Pasta', emoji: '🍝', servings: 2, ing: [['chicken_breast', 300], ['pasta_white', 300], ['olive_oil', 20], ['parmesan', 30]] },
-    { name: 'Salmon Power Plate', emoji: '🐟', servings: 1, ing: [['salmon_atlantic', 200], ['sweet_potato', 250], ['asparagus', 100]] },
-  ],
-  cut: [
-    { name: 'Lean Chicken & Greens', emoji: '🥗', servings: 1, ing: [['chicken_breast', 200], ['broccoli', 200], ['mixed_greens', 100]] },
-    { name: 'Egg White Scramble', emoji: '🍳', servings: 1, ing: [['egg_whites', 250], ['spinach', 100], ['mushrooms', 80]] },
-    { name: 'Tuna Volume Bowl', emoji: '🐟', servings: 1, ing: [['canned_tuna', 150], ['cucumber', 150], ['tomato', 100]] },
-    { name: 'Cod & Veg', emoji: '🐟', servings: 1, ing: [['cod', 220], ['cauliflower', 200], ['green_beans', 100]] },
-  ],
-  habesha: [
-    { name: 'Shiro & Injera Gains', emoji: '🥘', servings: 1, ing: [['shiro', 200], ['injera', 120]] },
-    { name: 'Tibs Protein Plate', emoji: '🍖', servings: 1, ing: [['tibs', 200], ['gomen', 120]] },
-    { name: 'Doro Wat Bowl', emoji: '🍲', servings: 1, ing: [['doro_wat', 200], ['injera', 120]] },
-  ],
-}
-// Async: the 1,300-item food DB is dynamic-imported here so it stays out of
-// the eager bundle (cookbooks are only built on a rare shop purchase).
-export async function buildCookbookRecipes(pack) {
-  const { FOOD_INDEX, getFoodMacros } = await import('../data/foods.js')
-  const defs = COOKBOOKS[pack] || []
-  return defs.map(def => {
-    const ingredients = def.ing
-      .map(([foodId, grams]) => { const f = FOOD_INDEX.get(foodId); return f ? { foodId, name: f.name, emoji: f.emoji, grams, macros: getFoodMacros(f, grams) } : null })
-      .filter(Boolean)
-    const t = ingredients.reduce((a, i) => ({ kcal: a.kcal + i.macros.kcal, protein: a.protein + i.macros.protein, carbs: a.carbs + i.macros.carbs, fat: a.fat + i.macros.fat, fiber: a.fiber + (i.macros.fiber || 0) }), { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 })
-    const s = Math.max(1, def.servings)
-    return {
-      id: 'cookbook_' + Math.random().toString(36).slice(2, 9),
-      name: def.name, emoji: def.emoji, servings: s, ingredients,
-      totals: { kcal: Math.round(t.kcal), protein: +t.protein.toFixed(1), carbs: +t.carbs.toFixed(1), fat: +t.fat.toFixed(1), fiber: +t.fiber.toFixed(1) },
-      perServing: { kcal: Math.round(t.kcal / s), protein: +(t.protein / s).toFixed(1), carbs: +(t.carbs / s).toFixed(1), fat: +(t.fat / s).toFixed(1), fiber: +(t.fiber / s).toFixed(1) },
-    }
-  })
-}

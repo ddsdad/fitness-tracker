@@ -7,7 +7,6 @@ const tabs = [
   { id: 'progress',   label: 'Progress',   Icon: IconChart },
   { id: 'goals',      label: 'Goals',      Icon: IconTarget },
   { id: 'recommend',  label: 'Plan',       Icon: IconStar },
-  { id: 'nutrition',  label: 'Nutrition',  Icon: IconApple },
 ]
 
 export default function Nav({ active, onNavigate, variant = 'mobile' }) {

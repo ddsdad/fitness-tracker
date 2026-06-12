@@ -116,8 +116,25 @@ export default function Program({ onStartSession }) {
   const curWeek = getCurrentWeek(program.startDate)
   const { start: weekStart } = getWeekRange(program.startDate, curWeek)
   const weekSessions = sessionsInWeek(sessions, program.startDate, curWeek)
-  const resolved = resolveWeekSchedule(program.schedule, weekStart, weekSessions)
+
+  // User overrides are stored date-keyed on the program; map them to this week's day indexes
+  const dateKeyFor = (dayIdx) => new Date(weekStart.getTime() + dayIdx * 86_400_000).toISOString().slice(0, 10)
+  const ovMap = {}
+  for (let d = 0; d < 7; d++) {
+    const ov = program.overrides?.[dateKeyFor(d)]
+    if (ov) ovMap[d] = ov
+  }
+
+  const resolved = resolveWeekSchedule(program.schedule, weekStart, weekSessions, new Date(), ovMap)
   const { days: scheduleDays, dayInWeek, todaySplit: split, variant } = resolved
+
+  const setTodayOverride = (splitId) => {
+    const key = dateKeyFor(dayInWeek)
+    const overrides = { ...(program.overrides || {}) }
+    if (splitId === null) delete overrides[key]
+    else overrides[key] = splitId
+    setProfile({ ...profile, program: { ...program, overrides } })
+  }
 
   const meta = SPLIT_META[split]
   const isRest = split === 'rest'
@@ -173,11 +190,31 @@ export default function Program({ onStartSession }) {
         })}
       </div>
       {scheduleDays.some(d => d.status === 'missed') && (
-        <div style={{ fontSize: '0.7rem', color: 'var(--text3)', textAlign: 'center', marginBottom: 16 }}>
+        <div style={{ fontSize: '0.7rem', color: 'var(--text3)', textAlign: 'center', marginBottom: 10 }}>
           ⤵️ Missed a day — remaining sessions shifted forward into the week.
         </div>
       )}
-      {!scheduleDays.some(d => d.status === 'missed') && <div style={{ marginBottom: 16 }} />}
+
+      {/* Today's split is YOURS to change — the rest of the week reflows around it */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>Today:</span>
+        {['push', 'pull', 'legs', 'rest'].map(id => {
+          const m = SPLIT_META[id]
+          const on = split === id
+          return (
+            <button key={id} onClick={() => setTodayOverride(id)}
+              style={{ padding: '5px 11px', borderRadius: 999, border: `1.5px solid ${on ? 'var(--green)' : 'var(--border)'}`, background: on ? 'rgba(34,197,94,0.12)' : 'var(--bg3)', color: on ? 'var(--green)' : 'var(--text2)', fontSize: '0.74rem', fontWeight: on ? 700 : 400, cursor: 'pointer' }}>
+              {m.emoji} {id === 'rest' ? 'Rest' : m.label.split(' ')[0]}
+            </button>
+          )
+        })}
+        {ovMap[dayInWeek] && (
+          <button onClick={() => setTodayOverride(null)}
+            style={{ padding: '5px 11px', borderRadius: 999, border: '1px dashed var(--border)', background: 'none', color: 'var(--text3)', fontSize: '0.72rem', cursor: 'pointer' }}>
+            ↺ Auto
+          </button>
+        )}
+      </div>
 
       {/* Rest day */}
       {isRest ? (

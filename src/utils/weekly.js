@@ -6,6 +6,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 import { MUSCLE_GROUPS, RP_VOLUME } from '../data/muscles.js'
 import { epley1RM } from './calculations.js'
+import { effectiveMuscleSets } from './involvement.js'
 
 const MS_DAY = 86_400_000
 const MS_WEEK = 7 * MS_DAY
@@ -48,18 +49,12 @@ export function sessionsInWeek(sessions, startDate, weekNo) {
   })
 }
 
-// Working-set volume per muscle for an explicit set of sessions (range-agnostic).
+// Effective working-set volume per muscle for an explicit set of sessions.
+// EMG-informed fractional involvement (utils/involvement.js): a deadlift set
+// credits glutes/hams/erectors heavily, quads/traps/forearms partially — not
+// the old flat primary-1/secondary-0.5.
 export function muscleVolumeForSessions(sessions) {
-  const sets = {}
-  Object.keys(MUSCLE_GROUPS).forEach(m => { sets[m] = 0 })
-  sessions.forEach(session => {
-    (session.exercises || []).forEach(ex => {
-      const count = (ex.sets || []).filter(s => !s.warmup).length
-      if (sets[ex.primaryMuscle] !== undefined) sets[ex.primaryMuscle] += count
-      ex.secondaryMuscles?.forEach(sm => { if (sets[sm] !== undefined) sets[sm] += count * 0.5 })
-    })
-  })
-  return sets
+  return effectiveMuscleSets(sessions, Object.keys(MUSCLE_GROUPS))
 }
 
 function bestE1RM(sets = []) {

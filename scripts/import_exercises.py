@@ -50,6 +50,7 @@ EQUIP_MAP = {
     'Resistance Band':'bands','Superband':'bands','Miniband':'bands',
     # Machine types
     'Machine':'machine','Medicine Ball':'machine',
+    'Kettlebell':'kettlebell',
 }
 PATTERN_MAP = {
     'Horizontal Push':'push_h','Vertical Push':'push_v',
@@ -68,8 +69,8 @@ DIFF_MAP = {
     'Advanced':3,'Expert':3,'Master':3,'Grand Master':3,'Legendary':3,
 }
 
-GYM_EQUIP = {'barbell','dumbbell','cable','bodyweight','bands','machine'}
-MAX_PER_MUSCLE = 25  # cap per muscle group
+GYM_EQUIP = {'barbell','dumbbell','cable','bodyweight','bands','machine','kettlebell'}
+MAX_PER_MUSCLE = 40  # cap per muscle group
 
 def slug(name):
     return re.sub(r'[^a-z0-9]+','_',name.lower().strip()).strip('_')[:40]

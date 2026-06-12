@@ -1,27 +1,19 @@
 import { MUSCLE_GROUPS, RP_VOLUME, GOAL_MUSCLE_WEIGHTS } from '../data/muscles.js'
+import { effectiveMuscleSets } from './involvement.js'
 
 // Backwards compat
 export { RP_VOLUME as OPTIMAL_SETS }
 
-// Calculate sets per muscle over sessions in the given time window
+// Effective sets per muscle over sessions in the given time window.
+// Uses EMG-informed fractional involvement (see utils/involvement.js) instead
+// of the old binary primary=1 / secondary=0.5 rule.
 export function getMuscleVolume(sessions, daysBack = 7) {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - daysBack)
-  const sets = {}
-  Object.keys(MUSCLE_GROUPS).forEach(m => { sets[m] = 0 })
-
-  sessions
-    .filter(s => new Date(s.date) >= cutoff)
-    .forEach(session => {
-      ;(session.exercises || []).forEach(ex => {
-        const count = (ex.sets || []).filter(s => !s.warmup).length  // warm-ups don't count as working volume
-        if (sets[ex.primaryMuscle] !== undefined) sets[ex.primaryMuscle] += count
-        ex.secondaryMuscles?.forEach(sm => {
-          if (sets[sm] !== undefined) sets[sm] += count * 0.5
-        })
-      })
-    })
-  return sets
+  return effectiveMuscleSets(
+    sessions.filter(s => new Date(s.date) >= cutoff),
+    Object.keys(MUSCLE_GROUPS)
+  )
 }
 
 // Compute adjusted MEV/MAV/MRV for a muscle based on goal weight multiplier

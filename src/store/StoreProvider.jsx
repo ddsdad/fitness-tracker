@@ -10,7 +10,7 @@ import {
   saveCustomExercises, saveRoutines,
 } from '../lib/db.js'
 import { computeLeaderboardStats } from '../utils/leaderboard.js'
-import { gameStats, buildCookbookRecipes, openMysteryBox, THEMES } from '../utils/gamification.js'
+import { gameStats, openMysteryBox, THEMES } from '../utils/gamification.js'
 import { archiveCompletedWeeks } from '../utils/weekly.js'
 
 export function StoreProvider({ children }) {
@@ -324,14 +324,6 @@ export function StoreProvider({ children }) {
     else if (item.kind === 'title') { game.owned = [...owned, item.id]; game.title = item.title; message = `Title "${item.title}" equipped!` }
     else if (item.kind === 'shield')  { game.shields = (game.shields || 0) + 1; message = `🛡️ Streak Shield added (${game.shields} owned)` }
     else if (item.kind === 'mystery') { const box = openMysteryBox(); game.questCoins = (game.questCoins || 0) + box.amount; message = `🎁 ${box.label === 'JACKPOT 🎉' ? box.label + ' ' : 'You won '}${box.amount} coins!` }
-    else if (item.kind === 'cookbook') {
-      // builder is async (lazy-loads the food DB); recipes land a beat later
-      buildCookbookRecipes(item.pack).then(recs => {
-        recs.forEach(r => storage.addRecipe(r))
-        const all = storage.getRecipes(); setRecipesState(all); push(uid => saveRecipes(uid, all))
-      }).catch(e => console.warn('[cookbook]', e))
-      game.owned = [...owned, item.id]; message = 'Recipes added to your cookbook!'
-    }
     setProfile({ ...p, game })
     return { ok: true, message }
   }, [setProfile])
