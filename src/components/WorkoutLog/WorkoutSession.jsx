@@ -9,6 +9,8 @@ import ExercisePicker from './ExercisePicker.jsx'
 import SetRow from './SetRow.jsx'
 import RestTimer from './RestTimer.jsx'
 import ShadowDuel from './ShadowDuel.jsx'
+import VictoryScreen from './VictoryScreen.jsx'
+import { loadFactor, hasLoadOffset } from '../../utils/effectiveLoad.js'
 
 function genId() { return Math.random().toString(36).slice(2) }
 
@@ -25,11 +27,13 @@ function calcTUT(exercises) {
 }
 
 // ── Best Epley 1RM across all sets of an exercise ─────────────────────────────
-function bestE1RM(sets) {
+// `factor` converts displayed/stack weight → effective load (cables/machines),
+// so 1RM, PRs and cross-exercise comparison all use what the muscle actually felt.
+function bestE1RM(sets, factor = 1) {
   let best = 0
   for (const s of sets) {
     if (s.weight > 0 && s.reps > 0) {
-      const e = epley1RM(s.weight, s.reps)
+      const e = epley1RM(s.weight * factor, s.reps)
       if (e > best) best = e
     }
   }
@@ -101,7 +105,7 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
 
   const ex = EXERCISES.find(e => e.id === exercise.exerciseId)
   const suggestion = progressionSuggestion(lastPerf?.sets)
-  const currentBest = bestE1RM(exercise.sets)
+  const currentBest = bestE1RM(exercise.sets, loadFactor(ex || exercise))
 
   // Fill all working sets with last session's weight & reps (one tap)
   const fillFromLast = () => {
@@ -222,12 +226,24 @@ function ExerciseBlock({ exercise, onUpdate, onDelete, defaultRest, lastPerf, is
       {/* Live 1RM */}
       {currentBest > 0 && (
         <div style={{ marginBottom: 8, fontSize: '0.75rem', color: 'var(--yellow)', fontWeight: 600 }}>
-          ⚡ Est. 1RM: {currentBest}kg
+          ⚡ Est. 1RM: {currentBest}{unit}
           {lastPerf?.e1rm && currentBest > lastPerf.e1rm && (
-            <span style={{ color: 'var(--green)', marginLeft: 6 }}>▲ PR +{(currentBest - lastPerf.e1rm).toFixed(1)}kg</span>
+            <span style={{ color: 'var(--green)', marginLeft: 6 }}>▲ PR +{(currentBest - lastPerf.e1rm).toFixed(1)}{unit}</span>
           )}
         </div>
       )}
+
+      {/* Effective-load note — cable/machine displayed weight ≠ muscle load */}
+      {ex && hasLoadOffset(ex) && (() => {
+        const topW = Math.max(0, ...exercise.sets.filter(s => !s.warmup).map(s => s.weight || 0))
+        if (topW <= 0) return null
+        const eff = +(topW * loadFactor(ex)).toFixed(1)
+        return (
+          <div style={{ marginBottom: 8, fontSize: '0.7rem', color: 'var(--sys)', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: 8, padding: '6px 10px' }}>
+            🔗 {topW}{unit} stack ≈ <strong>{eff}{unit}</strong> effective at the muscle ({Math.round(loadFactor(ex) * 100)}%) — PRs use effective load.
+          </div>
+        )
+      })()}
 
       {/* Rest timer */}
       {showTimer && <RestTimer seconds={timerSecs} onDone={() => setShowTimer(false)} />}
@@ -335,10 +351,10 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
     setSaving(true)
     const duration = Math.round((new Date() - startTime) / 60000)
 
-    // Compute best 1RM per exercise and check for new PRs
+    // Compute best 1RM per exercise (on EFFECTIVE load) and check for new PRs
     const exercisesWithE1RM = exercises.map(ex => ({
       ...ex,
-      bestE1RM: bestE1RM(ex.sets),
+      bestE1RM: bestE1RM(ex.sets, loadFactor(EXERCISES.find(e => e.id === ex.exerciseId) || ex)),
     }))
 
     // Update profile.liftMaxes with any new PRs on the 5 key lifts
@@ -386,7 +402,7 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
   // ── Save edits back onto an existing logged session (preserves id & date) ──────
   const commitEdit = () => {
     if (!initialSession) return
-    const exercisesWithE1RM = exercises.map(ex => ({ ...ex, bestE1RM: bestE1RM(ex.sets) }))
+    const exercisesWithE1RM = exercises.map(ex => ({ ...ex, bestE1RM: bestE1RM(ex.sets, loadFactor(EXERCISES.find(e => e.id === ex.exerciseId) || ex)) }))
     updateSession(initialSession.id, {
       name: name || 'Workout',
       exercises: exercisesWithE1RM,
@@ -403,25 +419,9 @@ export default function WorkoutSession({ mode, session: initialSession, onDone, 
     setEditing(false)
   }
 
-  // Post-session coach feedback overlay
+  // Post-session cinematic celebration
   if (feedback) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg)', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-        <div style={{ fontSize: 56, marginBottom: 12 }}>{feedback.prs.length ? '🏆' : '💪'}</div>
-        <h2 style={{ marginBottom: 8 }}>{feedback.headline}</h2>
-        {feedback.coins > 0 && (
-          <div style={{ display: 'inline-block', background: 'rgba(34,197,94,0.12)', border: '1px solid var(--green)', borderRadius: 999, padding: '6px 16px', marginBottom: 16, fontWeight: 800, color: 'var(--green)' }}>
-            +{feedback.coins} 🪙 earned
-          </div>
-        )}
-        <div style={{ maxWidth: 360, marginBottom: 24 }}>
-          {feedback.lines.map((l, i) => (
-            <p key={i} style={{ color: 'var(--text2)', fontSize: '0.9rem', lineHeight: 1.6, marginTop: 6 }}>{l}</p>
-          ))}
-        </div>
-        <button className="btn btn-primary btn-full" style={{ maxWidth: 320 }} onClick={onDone}>Done</button>
-      </div>
-    )
+    return <VictoryScreen feedback={feedback} onDone={onDone} />
   }
 
   return (

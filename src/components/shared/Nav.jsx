@@ -1,29 +1,25 @@
 import { createPortal } from 'react-dom'
-import { IconHome, IconDumbbell, IconChart, IconTarget, IconStar, IconApple } from './Icons.jsx'
+import { IconHome, IconChart, IconTarget, IconStar, IconDumbbell } from './Icons.jsx'
 
-const tabs = [
-  { id: 'dashboard',  label: 'Heatmap',   Icon: IconHome },
-  { id: 'workout',    label: 'Log',        Icon: IconDumbbell },
-  { id: 'progress',   label: 'Progress',   Icon: IconChart },
-  { id: 'goals',      label: 'Goals',      Icon: IconTarget },
-  { id: 'recommend',  label: 'Plan',       Icon: IconStar },
+// Side tabs flank a central elevated "Begin" power button.
+const left  = [
+  { id: 'dashboard', label: 'Home',  Icon: IconHome },
+  { id: 'progress',  label: 'Stats', Icon: IconChart },
 ]
+const right = [
+  { id: 'recommend', label: 'Plan',  Icon: IconStar },
+  { id: 'goals',     label: 'Goals', Icon: IconTarget },
+]
+const allTabs = [...left, { id: 'workout', label: 'Log', Icon: IconDumbbell }, ...right]
 
 export default function Nav({ active, onNavigate, variant = 'mobile' }) {
   if (variant === 'desktop') {
-    // Portal to <body> so it stays pinned to the screen edge, unaffected by the
-    // #root transform that constrains modals to the app column.
     return createPortal(
       <nav className="nav-desktop">
-        <div className="nav-desktop-brand">💪 FitTrack</div>
-        {tabs.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            className={`nav-desktop-item${active === id ? ' active' : ''}`}
-            onClick={() => onNavigate(id)}
-          >
-            <Icon />
-            <span>{label}</span>
+        <div className="nav-desktop-brand">⚔ ARISE</div>
+        {allTabs.map(({ id, label, Icon }) => (
+          <button key={id} className={`nav-desktop-item${active === id ? ' active' : ''}`} onClick={() => onNavigate(id)}>
+            <Icon /><span>{label}</span>
           </button>
         ))}
       </nav>,
@@ -31,18 +27,27 @@ export default function Nav({ active, onNavigate, variant = 'mobile' }) {
     )
   }
 
+  const Tab = ({ id, label, Icon }) => (
+    <button className={`nav-item${active === id ? ' active' : ''}`} onClick={() => onNavigate(id)}>
+      <Icon /><span>{label}</span>
+    </button>
+  )
+
   return (
     <nav className="nav">
-      {tabs.map(({ id, label, Icon }) => (
-        <button
-          key={id}
-          className={`nav-item${active === id ? ' active' : ''}`}
-          onClick={() => onNavigate(id)}
-        >
-          <Icon />
-          <span>{label}</span>
-        </button>
-      ))}
+      {left.map(t => <Tab key={t.id} {...t} />)}
+
+      {/* Central elevated power button — Begin / Log a session */}
+      <button
+        className={`nav-begin${active === 'workout' ? ' active' : ''}`}
+        onClick={() => onNavigate('workout')}
+        aria-label="Begin workout"
+      >
+        <span className="nav-begin-ring" />
+        <IconDumbbell />
+      </button>
+
+      {right.map(t => <Tab key={t.id} {...t} />)}
     </nav>
   )
 }

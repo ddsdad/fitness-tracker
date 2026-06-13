@@ -5,8 +5,11 @@ import { calculateTDEE, calculateMacroTargets, adaptiveTDEE, effectiveTDEE } fro
 import { computePRs } from '../../utils/analytics.js'
 import { gameStats } from '../../utils/gamification.js'
 import { currentStreak } from '../../utils/streak.js'
+import { computeAura } from '../../utils/aura.js'
+import { notifyState, requestNotify, scheduleDailyNudges } from '../../utils/notify.js'
 import { planExercisesToSession } from '../../utils/planSession.js'
 import SystemPanel from './SystemPanel.jsx'
+import HeroBanner from './HeroBanner.jsx'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -52,6 +55,15 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
     if (game.level > seenLevel) { setLevelUp(game.level); markLevelSeen(game.level) }
   }, [game.level, seenLevel, markLevelSeen])
 
+  // Schedule local "pull-back-in" notifications (only if user granted permission)
+  const [notifPerm, setNotifPerm] = useState(notifyState())
+  useEffect(() => {
+    if (notifPerm !== 'granted') return
+    const aura = computeAura(sessions, profile?.game?.shieldDates || [])
+    scheduleDailyNudges({ hour: 18, trainedToday, aura, split })
+  }, [notifPerm, trainedToday, split, sessions])
+  const enableNotifs = async () => setNotifPerm(await requestNotify())
+
   const body = (
     <>
       {/* ── Level-up celebration ── */}
@@ -66,76 +78,51 @@ export default function Today({ onNavigate, onStartSession, embedded = false }) 
         </div>
       )}
 
-      {/* ── Level / coins banner ── */}
-      <div className="card" style={{ marginBottom: 16, background: 'linear-gradient(135deg, rgba(34,197,94,0.12), var(--bg2))' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 46, height: 46, borderRadius: 12, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>{game.title.emoji}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ fontWeight: 700 }}>Level {game.level} · {game.title.title}</span>
-              <span style={{ fontWeight: 800, color: 'var(--green)' }}>🪙 {game.coins}</span>
-            </div>
-            <div style={{ height: 5, background: 'var(--bg4)', borderRadius: 3, overflow: 'hidden', marginTop: 6 }}>
-              <div style={{ height: '100%', width: `${game.levelProgress * 100}%`, background: 'var(--green)', borderRadius: 3, transition: 'width 0.5s' }} />
-            </div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--text3)', marginTop: 3 }}>{game.xpIntoLevel}/{game.xpForNext} XP to level {game.level + 1}</div>
-          </div>
-        </div>
-      </div>
+      {/* ── HERO — rank, power, today's mission ── */}
+      {(() => {
+        // Mission label + action depend on program/rest/done state
+        let label = '▶ Begin Today\'s Mission', sub = null, ready = true
+        let action = () => onNavigate?.('recommend')
+        if (trainedToday) { label = '✅ Mission Complete'; sub = 'Recovery & fuel from here — your shadow rests.'; ready = false }
+        else if (split === 'rest') { label = '😴 Rest Day'; sub = 'Recover, eat protein, sleep. Strength is built in rest.'; ready = false }
+        else if (splitMeta) {
+          label = `▶ Begin ${splitMeta.label}`
+          sub = `Week ${prog.week} · ${prog.weekPlan.phase}${readiness ? ` · Readiness ${readiness.score}/100` : ''}`
+          action = () => {
+            const variant = splitVariant(profile.program.schedule, prog.dayInWeek)
+            const wk = generateProgramWorkout(split, prog.weekPlan, variant)
+            onStartSession?.(planExercisesToSession(wk))
+          }
+        } else {
+          sub = 'A smart session tailored to your recovery awaits.'
+        }
+        return <HeroBanner onPrimary={action} primaryLabel={label} primaryReady={ready} subtitle={sub} />
+      })()}
 
       {/* ── The System — smart daily quests ── */}
       <SystemPanel readinessScore={readiness?.score} />
 
-      {/* ── Today's training ── */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Today's Training</div>
-        {split === 'rest' ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: '2rem' }}>😴</span>
-            <div><div style={{ fontWeight: 700 }}>Rest Day</div><div style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>Recover, eat protein, sleep. Back at it tomorrow.</div></div>
-          </div>
-        ) : trainedToday ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: '2rem' }}>✅</span>
-            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, color: 'var(--green)' }}>Workout done</div><div style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>Nice work today. Recovery & nutrition from here.</div></div>
-          </div>
-        ) : splitMeta ? (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <span style={{ fontSize: '2rem' }}>{splitMeta.emoji}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700 }}>{splitMeta.label} <span style={{ fontSize: '0.7rem', color: 'var(--text3)', fontWeight: 400 }}>· Week {prog.week}, {prog.weekPlan.phase}</span></div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>{readiness ? `Readiness ${readiness.score}/100` : 'Do a quick readiness check in Plan'}</div>
-              </div>
+      {/* Notification opt-in (only when not yet decided) */}
+      {notifPerm === 'default' && (
+        <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: '1.5rem' }}>🔔</span>
+          <div style={{ flex: 1, fontSize: '0.8rem', color: 'var(--text2)' }}>Let the System summon you — daily mission reminders & aura-danger alerts.</div>
+          <button className="btn btn-secondary" style={{ flexShrink: 0, padding: '8px 14px', fontSize: '0.8rem' }} onClick={enableNotifs}>Enable</button>
+        </div>
+      )}
+
+      {/* readiness warning (when low) */}
+      {!trainedToday && splitMeta && (() => {
+        const adj = readiness ? readinessAdjustment(readiness.score) : null
+        if (adj && adj.label !== 'Primed' && adj.label !== 'Ready') {
+          return (
+            <div style={{ background: `${adj.color}18`, border: `1px solid ${adj.color}44`, borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: 16, fontSize: '0.8rem', color: adj.color, lineHeight: 1.5 }}>
+              <strong>{adj.label}:</strong> {adj.message}
             </div>
-            {(() => {
-              const adj = readiness ? readinessAdjustment(readiness.score) : null
-              if (adj && adj.label !== 'Primed' && adj.label !== 'Ready') {
-                return (
-                  <div style={{ background: `${adj.color}18`, border: `1px solid ${adj.color}44`, borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: '0.8rem', color: adj.color, lineHeight: 1.5 }}>
-                    <strong>{adj.label}:</strong> {adj.message}
-                  </div>
-                )
-              }
-              return null
-            })()}
-            <button className="btn btn-primary btn-full" onClick={() => {
-              const variant = splitVariant(profile.program.schedule, prog.dayInWeek)
-              const wk = generateProgramWorkout(split, prog.weekPlan, variant)
-              onStartSession?.(planExercisesToSession(wk))
-            }}>▶ Start {splitMeta.label}</button>
-          </>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: '2rem' }}>🏋️</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700 }}>{trainedToday ? 'Trained today' : 'Ready to train?'}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>Get a smart session tailored to your recovery.</div>
-            </div>
-            <button className="btn btn-secondary" style={{ flexShrink: 0 }} onClick={() => onNavigate?.('recommend')}>Plan</button>
-          </div>
-        )}
-      </div>
+          )
+        }
+        return null
+      })()}
 
       {/* ── Fuel targets (logger removed — see Plan → Fuel for the full recommender) ── */}
       <div className="card" style={{ marginBottom: 16 }}>

@@ -74,8 +74,22 @@ export default function SetRow({ set, idx, onUpdate, onDelete, onSetComplete, su
         />
 
         <button
-          style={{ width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: set.done ? 'var(--green)' : 'var(--bg4)', color: set.done ? '#000' : 'var(--text2)', transition: 'all 0.15s' }}
-          onClick={() => onSetComplete(set)}
+          style={{ position: 'relative', width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: set.done ? 'var(--green)' : 'var(--bg4)', color: set.done ? '#000' : 'var(--text2)', transition: 'all 0.15s', boxShadow: set.done ? '0 0 12px -2px var(--green)' : 'none' }}
+          onClick={(e) => {
+            // Floating "+XP" tick + haptic when completing (not un-completing) a real set
+            if (!set.done && set.weight > 0 && set.reps > 0) {
+              try { navigator.vibrate?.(30) } catch {}
+              const xp = Math.max(5, Math.round(set.weight * set.reps / 12))
+              const tick = document.createElement('div')
+              tick.className = 'reward-tick'
+              tick.textContent = `+${xp} XP`
+              tick.style.color = 'var(--accent)'
+              tick.style.left = '-8px'; tick.style.top = '-6px'
+              e.currentTarget.appendChild(tick)
+              setTimeout(() => tick.remove(), 950)
+            }
+            onSetComplete(set)
+          }}
         >
           <IconCheck />
         </button>
