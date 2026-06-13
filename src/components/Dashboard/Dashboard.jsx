@@ -206,7 +206,8 @@ export default function Dashboard({ onNavigate, onStartSession }) {
       <div className="page-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h1>{profile?.name ? `Hey, ${profile.name} 👋` : 'Muscle Heatmap'}</h1>
+            <div className="hud-eyebrow" style={{ marginBottom: 3 }}>System Online</div>
+            <h1>{profile?.name ? profile.name : 'Hunter'}</h1>
             <p>Week {currentWeek} · {weeksLeft} weeks left</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -227,26 +228,36 @@ export default function Dashboard({ onNavigate, onStartSession }) {
       {/* Quick stats */}
       <div className="grid-3" style={{ marginBottom: 20 }}>
         <div className="stat-block">
-          <div className="val text-green">{sessions7.length}</div>
+          <div className="val" style={{ color: 'var(--accent)', textShadow: '0 0 16px color-mix(in srgb, var(--accent) 60%, transparent)' }}>{sessions7.length}</div>
           <div className="lbl">Sessions</div>
         </div>
         <div className="stat-block">
-          <div className="val">{totalVolume7 >= 1000 ? `${(totalVolume7/1000).toFixed(1)}k` : totalVolume7}</div>
+          <div className="val" style={{ color: 'var(--sys)', textShadow: '0 0 16px rgba(56,189,248,0.5)' }}>{totalVolume7 >= 1000 ? `${(totalVolume7/1000).toFixed(1)}k` : totalVolume7}</div>
           <div className="lbl">Volume kg</div>
         </div>
         <div className="stat-block">
-          <div className="val">{Object.values(muscleVolume).filter(v => v > 0).length}</div>
+          <div className="val" style={{ color: 'var(--sys2)', textShadow: '0 0 16px rgba(129,140,248,0.5)' }}>{Object.values(muscleVolume).filter(v => v > 0).length}</div>
           <div className="lbl">Muscles Hit</div>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 999, padding: 3, marginBottom: 20, gap: 2 }}>
-        {[['today','Today'],['status','⚔'],['heatmap','Heatmap'],['schedule','Sched'],['compete','🏆'],['stats','Stats']].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '7px 4px', borderRadius: 999, border: 'none', cursor: 'pointer', background: tab === id ? 'var(--bg2)' : 'transparent', color: tab === id ? (id === 'compete' ? 'var(--green)' : id === 'status' ? '#38bdf8' : 'var(--text)') : 'var(--text3)', fontWeight: tab === id ? 600 : 400, fontSize: '0.75rem', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
-            {label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', background: 'rgba(10,16,30,0.55)', border: '1px solid var(--border)', borderRadius: 14, padding: 4, marginBottom: 20, gap: 3, overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {[['today','Home'],['status','Status'],['heatmap','Body'],['schedule','Week'],['compete','Arena'],['stats','Stats']].map(([id, label]) => {
+          const on = tab === id
+          const accent = id === 'status' ? 'var(--sys)' : 'var(--accent)'
+          return (
+            <button key={id} onClick={() => setTab(id)} style={{
+              flex: '1 0 auto', padding: '8px 10px', borderRadius: 10, border: on ? `1px solid ${accent}55` : '1px solid transparent', cursor: 'pointer',
+              background: on ? `color-mix(in srgb, ${accent} 16%, transparent)` : 'transparent',
+              color: on ? accent : 'var(--text3)', fontWeight: on ? 800 : 600, fontSize: '0.72rem', letterSpacing: '0.02em',
+              transition: 'all 0.15s', whiteSpace: 'nowrap',
+              boxShadow: on ? `0 0 14px -6px ${accent}` : 'none',
+            }}>
+              {label}
+            </button>
+          )
+        })}
       </div>
 
       {tab === 'status' && <HunterStatus />}
