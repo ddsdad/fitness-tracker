@@ -179,8 +179,10 @@ export default function Dashboard({ onNavigate, onStartSession }) {
   const goalId = profile?.physiqueGoal || 'overall_size'
   const customWeights = Object.keys(goals).length > 0 ? goals : null
 
-  const currentWeek = profile ? getCurrentWeek(profile.startDate) : 1
-  const weeksLeft   = profile ? Math.max(0, profile.targetWeeks - currentWeek) : 0
+  const rawWeek     = profile ? getCurrentWeek(profile.startDate) : 1
+  const targetWeeks = profile?.targetWeeks || 12
+  const currentWeek = Math.min(rawWeek, targetWeeks)        // cap so the heatmap navigator can't exceed the plan
+  const weeksLeft   = Math.max(0, targetWeeks - rawWeek)
 
   // Heatmap now reflects a specific PROGRAM WEEK (default = current), not a
   // rolling window — so "week 2" means week 2, matching how the user thinks.
@@ -208,7 +210,7 @@ export default function Dashboard({ onNavigate, onStartSession }) {
           <div>
             <div className="hud-eyebrow" style={{ marginBottom: 3 }}>System Online</div>
             <h1>{profile?.name ? profile.name : 'Hunter'}</h1>
-            <p>Week {currentWeek} · {weeksLeft} weeks left</p>
+            <p>{weeksLeft > 0 ? `Week ${currentWeek} · ${weeksLeft} weeks left` : `Program complete · ${targetWeeks} weeks`}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* Risk gauge */}

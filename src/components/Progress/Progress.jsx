@@ -350,7 +350,12 @@ export default function Progress() {
   }
 
   if (!profile) return <EmptyState />
-  const currentWeek = getCurrentWeek(profile.startDate)
+  // Cap the displayed program week at the plan length — a finished program reads
+  // "Week 12 of 12 · Complete", never "Week 17 of 12 / 142%".
+  const rawWeek = getCurrentWeek(profile.startDate)
+  const targetWeeks = profile.targetWeeks || 12
+  const programDone = rawWeek > targetWeeks
+  const currentWeek = Math.min(rawWeek, targetWeeks)
 
   // Build chart data
   const chartData = profile.milestones?.map(m => {
@@ -433,7 +438,7 @@ export default function Progress() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <h1>Progress</h1>
-            <p>Week {currentWeek} of {profile.targetWeeks}</p>
+            <p>{programDone ? `Program complete · ${targetWeeks} weeks` : `Week ${currentWeek} of ${targetWeeks}`}</p>
           </div>
           <button className="btn btn-primary" style={{ padding: '10px 16px', fontSize: '0.875rem' }} onClick={() => setShowCheckin(true)}>
             <IconPlus /> Check In
