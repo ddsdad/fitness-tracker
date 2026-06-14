@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, ContactShadows, useCursor } from '@react-three/drei'
 import { getHeatColor } from '../../utils/heatmap.js'
@@ -60,140 +61,181 @@ export function buildProportions(profile) {
 // ── Skin material — warm bronze, soft sheen (reads well in dark & light) ─────
 const SKIN = '#9a6b4f'
 function Skin() {
-  return <meshStandardMaterial color={SKIN} roughness={0.55} metalness={0.05} />
+  return <meshStandardMaterial color={SKIN} roughness={0.5} metalness={0.04} />
 }
 
-// ── Parametric body ───────────────────────────────────────────────────────────
+// ── Lofted-surface builder ────────────────────────────────────────────────────
+// Stitches a stack of elliptical cross-section "rings" into ONE smooth, closed,
+// vertex-welded surface (no seams, no overlapping blobs). Each ring: { y, rx,
+// rz, cz } — half-width, half-depth, and a front/back centre offset. A smooth
+// bell taper caps both ends so torso/limbs close cleanly.
+function loftGeometry(rings, radial = 32) {
+  const geo = new THREE.BufferGeometry()
+  const rows = rings.length
+  const pos = [], norm = [], idx = []
+
+  for (let r = 0; r < rows; r++) {
+    const ring = rings[r]
+    for (let a = 0; a <= radial; a++) {
+      const t = (a / radial) * Math.PI * 2
+      const cs = Math.cos(t), sn = Math.sin(t)
+      pos.push(ring.rx * cs, ring.y, ring.cz + ring.rz * sn)
+      // approximate outward normal from the ellipse
+      const nx = cs / ring.rx, nz = sn / ring.rz
+      const len = Math.hypot(nx, nz) || 1
+      norm.push(nx / len, 0.12, nz / len)
+    }
+  }
+  const ringLen = radial + 1
+  for (let r = 0; r < rows - 1; r++) {
+    for (let a = 0; a < radial; a++) {
+      const c = r * ringLen + a, n = c + ringLen
+      idx.push(c, n, c + 1, c + 1, n, n + 1)
+    }
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3))
+  geo.setIndex(idx)
+  geo.computeVertexNormals()
+  return geo
+}
+
+// A smooth tapered limb segment (truncated-cone-ish) as a closed lathe surface.
+function limbRings(yTop, yBot, rTop, rBot, bulge = 0, segs = 10) {
+  const rings = []
+  for (let i = 0; i <= segs; i++) {
+    const f = i / segs
+    const y = yTop + (yBot - yTop) * f
+    // sine bulge gives a muscle belly mid-segment
+    const b = 1 + Math.sin(f * Math.PI) * bulge
+    const rr = (rTop + (rBot - rTop) * f) * b
+    rings.push({ y, rx: rr, rz: rr * 0.92, cz: 0 })
+  }
+  return rings
+}
+
+// ── Parametric body — one continuous skin, driven by measurements ─────────────
 function BodyBase({ P }) {
-  const shx = P.sh                       // lateral shoulder/arm multiplier
-  const armR = P.arm, thighR = P.thigh, calfR = P.calf
+  const shx = P.sh, armR = P.arm, thighR = P.thigh, calfR = P.calf
   const female = P.g === 'female'
+
+  // TORSO silhouette: a single lofted tube flowing neck→traps→chest→waist→hips.
+  // Each ring's rx (width) / rz (depth) comes straight from the proportions, so
+  // a wide-shoulder / narrow-waist build reads as a real V-taper, not blobs.
+  const torso = useMemo(() => {
+    const W = (k) => 0.5 * k          // helper: half-width
+    const rings = [
+      { y: 0.86, rx: W(0.13) * P.neck,         rz: W(0.12) * P.neck,        cz: 0 },     // base of neck
+      { y: 0.80, rx: W(0.30) * shx,            rz: W(0.20),                 cz: 0 },     // clavicle shelf
+      { y: 0.74, rx: W(0.46) * shx,            rz: W(0.27) * P.chest,       cz: 0.012 }, // shoulders (widest)
+      { y: 0.66, rx: W(0.44) * shx,            rz: W(0.30) * P.chest,       cz: 0.018 }, // upper chest
+      { y: 0.56, rx: W(0.41) * P.chest,        rz: W(0.31) * P.chest,       cz: 0.02 },  // mid chest (pecs)
+      { y: 0.46, rx: W(0.37) * P.chest,        rz: W(0.28) * P.chest,       cz: 0.01 },  // lower ribcage
+      { y: 0.34, rx: W(0.31) * P.waist,        rz: W(0.235) * P.waist,      cz: 0 },     // upper abs
+      { y: 0.22, rx: W(0.285) * P.waist,       rz: W(0.225) * P.waist,      cz: 0 },     // waist (narrowest)
+      { y: 0.10, rx: W(0.33) * P.hips,         rz: W(0.25) * P.hips,        cz: -0.004 },// lower abs
+      { y: -0.02, rx: W(0.40) * P.hips,        rz: W(0.30) * P.hips,        cz: -0.01 }, // hips
+      { y: -0.13, rx: W(0.40) * P.hips,        rz: W(0.32) * P.hips,        cz: -0.02 }, // glutes/seat
+      { y: -0.22, rx: W(0.30) * P.hips,        rz: W(0.26) * P.hips,        cz: -0.01 }, // crotch taper
+    ]
+    if (female) { rings.forEach(r => { if (r.y > 0.1 && r.y < 0.4) r.rx *= 0.92 }) }   // narrower female torso
+    return loftGeometry(rings, 40)
+  }, [P.neck, shx, P.chest, P.waist, P.hips, female])
+
+  const neckGeo  = useMemo(() => loftGeometry(limbRings(0.95, 0.85, 0.060 * P.neck, 0.075 * P.neck, 0), 24), [P.neck])
+  const upperArm = useMemo(() => loftGeometry(limbRings(0.0, -0.36, 0.082 * armR, 0.060 * armR, 0.18), 20), [armR])
+  const foreArm  = useMemo(() => loftGeometry(limbRings(0.0, -0.30, 0.058 * armR, 0.044, 0.14), 18), [armR])
+  const thighGeo = useMemo(() => loftGeometry(limbRings(0.0, -0.42, 0.135 * thighR, 0.092 * thighR, 0.14), 22), [thighR])
+  const shinGeo  = useMemo(() => loftGeometry(limbRings(0.0, -0.40, 0.082 * calfR, 0.050, 0.28), 20), [calfR])
+
+  const ax = 0.40 * shx       // shoulder joint x
+  const lx = 0.135 * P.hips   // hip joint x
 
   return (
     <group scale={[1, P.height, 1]}>
       {/* HEAD */}
-      <mesh position={[0, 1.080, 0]} scale={[0.96, 1.05, 0.92]}>
-        <sphereGeometry args={[0.155, 48, 48]} /><Skin />
+      <mesh position={[0, 1.085, 0.01]} scale={[0.92, 1.06, 0.94]}>
+        <sphereGeometry args={[0.15, 48, 48]} /><Skin />
       </mesh>
-      <mesh position={[0, 0.962, 0.020]} scale={[0.82, 0.52, 0.78]}>
-        <sphereGeometry args={[0.155, 32, 24]} /><Skin />
+      <mesh position={[0, 0.97, 0.03]} scale={[0.78, 0.56, 0.74]}>
+        <sphereGeometry args={[0.15, 32, 24]} /><Skin />
       </mesh>
 
       {/* NECK */}
-      <mesh position={[0, 0.856, 0]}>
-        <cylinderGeometry args={[0.058 * P.neck, 0.072 * P.neck, 0.190, 24]} /><Skin />
-      </mesh>
+      <mesh geometry={neckGeo}><Skin /></mesh>
 
-      {/* CLAVICLE SHELF + TRAPS */}
-      <mesh position={[0, 0.742, 0.028]} scale={[1.70 * shx, 0.46, 0.76]}>
-        <sphereGeometry args={[0.162, 32, 20]} /><Skin />
-      </mesh>
-      <mesh position={[0, 0.778, -0.046]} scale={[1.34 * shx, 0.42, 0.70]}>
-        <sphereGeometry args={[0.140, 28, 18]} /><Skin />
-      </mesh>
+      {/* TORSO — single lofted skin */}
+      <mesh geometry={torso}><Skin /></mesh>
 
-      {/* DELTOID CAPS */}
-      {[-1, 1].map((s, i) => (
-        <mesh key={i} position={[s * 0.348 * shx, 0.655, -0.008]} scale={[0.92, 0.90, 0.96]}>
-          <sphereGeometry args={[0.108 * Math.max(armR, 0.9), 32, 24]} /><Skin />
+      {/* DELTOID caps blend the arm into the shoulder */}
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * ax, 0.70, 0.012]} scale={[0.96, 0.86, 0.96]}>
+          <sphereGeometry args={[0.10 * Math.max(armR, 0.92), 28, 22]} /><Skin />
         </mesh>
       ))}
 
-      {/* TORSO — ribcage tapering into waist */}
-      <mesh position={[0, 0.530, 0]} scale={[0.95 * P.chest * (female ? 0.93 : 1), 1, 0.74 * P.chest]}>
-        <capsuleGeometry args={[0.230, 0.330, 12, 36]} /><Skin />
-      </mesh>
-      {/* Pec / chest plates */}
-      {[-1, 1].map((s, i) => (
-        <mesh key={i} position={[s * 0.110, 0.522, 0.168 * P.chest]} scale={[0.86, female ? 0.72 : 0.64, 0.60]}>
-          <sphereGeometry args={[0.160 * P.chest, 28, 20]} /><Skin />
-        </mesh>
-      ))}
-      {/* Lat flare */}
-      {[-1, 1].map((s, i) => (
-        <mesh key={i} position={[s * 0.262 * P.chest, 0.352, -0.118]} scale={[0.74, 1.24, 0.54]}>
-          <sphereGeometry args={[0.142 * P.chest, 24, 16]} /><Skin />
-        </mesh>
+      {/* ARMS — smooth tapered tubes, tucked close with a slight outward splay */}
+      {[-1, 1].map((s) => (
+        <group key={s} position={[s * ax, 0.66, -0.005]} rotation={[0, 0, s * 0.10]}>
+          <mesh geometry={upperArm}><Skin /></mesh>
+          <mesh position={[0, -0.36, 0]} scale={[0.92, 1, 0.92]}>
+            <sphereGeometry args={[0.062 * armR, 18, 14]} /><Skin />
+          </mesh>
+          <mesh geometry={foreArm} position={[0, -0.37, 0]} rotation={[0, 0, s * -0.05]}><Skin /></mesh>
+          <mesh position={[0, -0.70, 0.01]} scale={[0.85, 0.7, 0.5]}>
+            <sphereGeometry args={[0.06, 16, 12]} /><Skin />
+          </mesh>
+        </group>
       ))}
 
-      {/* WAIST */}
-      <mesh position={[0, 0.148, 0]} scale={[0.70 * P.waist, 1, 0.72 * P.waist]}>
-        <capsuleGeometry args={[0.202, 0.218, 12, 28]} /><Skin />
-      </mesh>
-
-      {/* PELVIS + GLUTES */}
-      <mesh position={[0, -0.115, 0]} scale={[0.88 * P.hips, 0.83, 0.80 * P.hips]}>
-        <capsuleGeometry args={[0.226, 0.155, 12, 28]} /><Skin />
-      </mesh>
-      {[-1, 1].map((s, i) => (
-        <mesh key={i} position={[s * 0.132 * P.hips, -0.196, -0.186 * P.hips]} scale={[0.82, 0.90, 0.86]}>
-          <sphereGeometry args={[0.172 * P.hips, 24, 18]} /><Skin />
-        </mesh>
+      {/* LEGS — thigh + calf tubes, knee/ankle/foot caps */}
+      {[-1, 1].map((s) => (
+        <group key={s} position={[s * lx, -0.24, 0.005]}>
+          <mesh geometry={thighGeo}><Skin /></mesh>
+          <mesh position={[0, -0.43, 0.005]} scale={[0.95, 0.92, 0.98]}>
+            <sphereGeometry args={[0.085 * thighR, 18, 14]} /><Skin />
+          </mesh>
+          <mesh geometry={shinGeo} position={[0, -0.45, 0]}><Skin /></mesh>
+          {/* gastroc bulge */}
+          <mesh position={[0, -0.62, -0.05]} scale={[0.7, 0.95, 0.6]}>
+            <sphereGeometry args={[0.082 * calfR, 16, 14]} /><Skin />
+          </mesh>
+          <mesh position={[0, -0.86, 0.0]} scale={[1, 0.55, 0.9]}>
+            <sphereGeometry args={[0.062, 14, 12]} /><Skin />
+          </mesh>
+          {/* foot */}
+          <mesh position={[0, -0.90, 0.06]} scale={[0.95, 0.4, 1.7]}>
+            <sphereGeometry args={[0.06, 16, 12]} /><Skin />
+          </mesh>
+        </group>
       ))}
-
-      {/* ARMS */}
-      {[-1, 1].map((s, i) => {
-        const rz = s * -0.185
-        const ax = 0.425 * shx
-        return (
-          <group key={i}>
-            <mesh position={[s * ax, 0.415, 0.008]} rotation={[0, 0, rz]}>
-              <capsuleGeometry args={[0.077 * armR, 0.365, 12, 24]} /><Skin />
-            </mesh>
-            <mesh position={[s * (ax + 0.018), 0.082, 0.006]}>
-              <sphereGeometry args={[0.066 * armR, 20, 16]} /><Skin />
-            </mesh>
-            <mesh position={[s * (ax + 0.021), -0.095, 0.006]} rotation={[0, 0, rz * 0.38]}>
-              <capsuleGeometry args={[0.056 * Math.max(armR * 0.92, 0.8), 0.280, 12, 22]} /><Skin />
-            </mesh>
-            <mesh position={[s * (ax + 0.025), -0.268, 0.005]} scale={[0.90, 0.62, 0.50]}>
-              <sphereGeometry args={[0.058, 16, 12]} /><Skin />
-            </mesh>
-          </group>
-        )
-      })}
-
-      {/* LEGS */}
-      {[-1, 1].map((s, i) => {
-        const lx = 0.148 * P.hips
-        return (
-          <group key={i}>
-            <mesh position={[s * lx, -0.468, 0.008]}>
-              <capsuleGeometry args={[0.118 * thighR, 0.415, 12, 26]} /><Skin />
-            </mesh>
-            <mesh position={[s * (lx - 0.008), -0.735, 0.010]}>
-              <sphereGeometry args={[0.090 * thighR, 18, 14]} /><Skin />
-            </mesh>
-            <mesh position={[s * (lx - 0.016), -0.908, 0.005]} scale={[0.90, 1, 0.92]}>
-              <capsuleGeometry args={[0.078 * calfR, 0.322, 12, 24]} /><Skin />
-            </mesh>
-            <mesh position={[s * (lx - 0.018), -0.875, -0.064]} scale={[0.78, 0.74, 0.66]}>
-              <sphereGeometry args={[0.094 * calfR, 18, 14]} /><Skin />
-            </mesh>
-            <mesh position={[s * (lx - 0.024), -1.085, 0.008]} scale={[1, 0.58, 0.88]}>
-              <sphereGeometry args={[0.066, 16, 12]} /><Skin />
-            </mesh>
-            <mesh position={[s * (lx - 0.027), -1.152, 0.055]} scale={[0.98, 0.40, 1.62]}>
-              <capsuleGeometry args={[0.062, 0.092, 8, 14]} /><Skin />
-            </mesh>
-          </group>
-        )
-      })}
     </group>
   )
 }
 
 // ── One interactive muscle — hover glow, selected pulse ──────────────────────
+// Untrained muscles render in this gray (from getHeatColor at volume 0).
+const UNTRAINED_HEX = '#464646'
+
 function MuscleMesh({ name, position, scale, color, active, hovered, setHovered, onClick, heightS }) {
   const ref = useRef()
   const isHover = hovered === name
+  // An untrained muscle should DISSOLVE into the skin (a clean body), not sit on
+  // it as a gray lump. Trained muscles read as flat colored "decals" hugging the
+  // surface — so the figure looks painted-on, not assembled from blobs.
+  const untrained = color.toLowerCase() === UNTRAINED_HEX
+  const dispColor = untrained ? SKIN : color
 
   useFrame(({ clock }) => {
     if (!ref.current) return
     const mat = ref.current.material
-    const target = active ? 0.85 + Math.sin(clock.elapsedTime * 5) * 0.25 : isHover ? 0.5 : 0.1
-    mat.emissiveIntensity += (target - mat.emissiveIntensity) * 0.18
-    const sPulse = active ? 1 + Math.sin(clock.elapsedTime * 5) * 0.05 : isHover ? 1.06 : 1
+    // Opacity: trained = visible decal; untrained = barely-there (melts into skin)
+    const baseOpacity = untrained ? (isHover ? 0.5 : 0.0) : (active ? 1 : isHover ? 0.96 : 0.9)
+    mat.opacity += (baseOpacity - mat.opacity) * 0.2
+    const emTarget = untrained ? (isHover ? 0.3 : 0) : active ? 0.9 + Math.sin(clock.elapsedTime * 5) * 0.3 : isHover ? 0.55 : 0.22
+    mat.emissiveIntensity += (emTarget - mat.emissiveIntensity) * 0.18
+    // Only the active muscle gently pulses; others stay flush to the body
+    const sPulse = active ? 1 + Math.sin(clock.elapsedTime * 5) * 0.04 : 1
     ref.current.scale.set(scale[0] * sPulse, scale[1] * sPulse, scale[2] * sPulse)
   })
 
@@ -202,12 +244,15 @@ function MuscleMesh({ name, position, scale, color, active, hovered, setHovered,
       ref={ref}
       position={[position[0], position[1] * heightS, position[2]]}
       scale={scale}
+      renderOrder={2}
       onClick={(e) => { e.stopPropagation(); onClick(name) }}
       onPointerOver={(e) => { e.stopPropagation(); setHovered(name) }}
       onPointerOut={() => setHovered(h => (h === name ? null : h))}
     >
-      <sphereGeometry args={[1, 28, 22]} />
-      <meshStandardMaterial color={color} roughness={0.5} metalness={0.05} emissive={color} emissiveIntensity={0.1} />
+      <sphereGeometry args={[1, 24, 18]} />
+      <meshStandardMaterial color={dispColor} roughness={0.45} metalness={0.0}
+        emissive={dispColor} emissiveIntensity={0.2} transparent opacity={untrained ? 0 : 0.9}
+        depthWrite={false} polygonOffset polygonOffsetFactor={-2} />
     </mesh>
   )
 }
@@ -218,8 +263,9 @@ function Muscles({ P, vol, goalId, weights, active, onClick }) {
   useCursor(!!hovered)
   const c = (m) => hex(getHeatColor(m, vol[m] || 0, goalId, weights))
   const shx = P.sh, armR = P.arm, thighR = P.thigh, calfR = P.calf
-  const ax = 0.425 * shx
-  const lx = 0.148 * P.hips
+  // Match the base body's joint anchors so overlays sit on the new lofted skin
+  const ax = 0.40 * shx       // shoulder joint x (was 0.425)
+  const lx = 0.135 * P.hips   // hip joint x (was 0.148)
 
   const M = ({ name, x, y, z, sx, sy, sz, both = true }) => {
     const common = {
@@ -234,34 +280,37 @@ function Muscles({ P, vol, goalId, weights, active, onClick }) {
     )
   }
 
+  // Overlays are flattened (thin sz) and pressed slightly INTO the surface so
+  // trained muscles read as colored skin zones, never protruding lumps.
+  const FLAT = 0.6   // global depth squash for the decal look
   return (
     <group>
       {/* FRONT */}
-      <M name="chest"       x={0.108} y={0.515} z={0.178 * P.chest + 0.022} sx={0.155 * P.chest} sy={0.125} sz={0.052} />
-      <M name="front_delts" x={0.348 * shx} y={0.648} z={0.082} sx={0.088} sy={0.092} sz={0.072} />
-      <M name="side_delts"  x={0.402 * shx} y={0.638} z={0.004} sx={0.080} sy={0.108} sz={0.088} />
-      <M name="biceps"      x={ax + 0.007} y={0.388} z={0.068} sx={0.064 * armR} sy={0.162} sz={0.058} />
-      <M name="forearms"    x={ax + 0.012} y={-0.070} z={0.040} sx={0.050 * armR} sy={0.125} sz={0.038} />
+      <M name="chest"       x={0.10} y={0.52} z={0.165 * P.chest} sx={0.15 * P.chest} sy={0.12} sz={0.04 * FLAT} />
+      <M name="front_delts" x={0.36 * shx} y={0.685} z={0.05} sx={0.085} sy={0.09} sz={0.06 * FLAT} />
+      <M name="side_delts"  x={0.40 * shx} y={0.675} z={-0.01} sx={0.075} sy={0.1} sz={0.07 * FLAT} />
+      <M name="biceps"      x={ax * 1.0 + 0.005} y={0.45} z={0.06} sx={0.06 * armR} sy={0.15} sz={0.05 * FLAT} />
+      <M name="forearms"    x={ax * 1.05} y={0.10} z={0.045} sx={0.048 * armR} sy={0.12} sz={0.038 * FLAT} />
       {/* abs — single interactive sheet w/ 6-pack relief */}
-      {[-0.052, 0.052].flatMap((x) =>
-        [0.132, 0.228, 0.322].map((y) => (
+      {[-0.05, 0.05].flatMap((x) =>
+        [0.16, 0.25, 0.34].map((y) => (
           <MuscleMesh key={`abs${x}${y}`} name="abs" color={c('abs')} active={active === 'abs'}
             hovered={hovered} setHovered={setHovered} onClick={onClick} heightS={P.height}
-            position={[x, y, 0.150 * P.waist + 0.012]} scale={[0.055, 0.052, 0.032]} />
+            position={[x, y, 0.135 * P.waist]} scale={[0.05, 0.05, 0.025]} />
         ))
       )}
-      <M name="quads"       x={lx} y={-0.460} z={0.105 * thighR + 0.015} sx={0.115 * thighR} sy={0.215} sz={0.088} />
+      <M name="quads"       x={lx} y={-0.44} z={0.10 * thighR} sx={0.11 * thighR} sy={0.2} sz={0.06 * FLAT} />
 
       {/* BACK */}
-      <M name="traps"       x={0} y={0.625} z={-0.192} sx={0.238 * shx} sy={0.165} sz={0.055} both={false} />
-      <M name="rear_delts"  x={0.348 * shx} y={0.648} z={-0.118} sx={0.082} sy={0.090} sz={0.068} />
-      <M name="lats"        x={0.195 * P.chest} y={0.285} z={-0.188} sx={0.128 * P.chest} sy={0.268} sz={0.068} />
-      <M name="rhomboids"   x={0} y={0.482} z={-0.205} sx={0.158} sy={0.138} sz={0.052} both={false} />
-      <M name="triceps"     x={ax + 0.007} y={0.388} z={-0.094} sx={0.067 * armR} sy={0.168} sz={0.060} />
-      <M name="lower_back"  x={0.058} y={0.080} z={-0.215 * P.waist - 0.01} sx={0.058} sy={0.198} sz={0.046} />
-      <M name="glutes"      x={0.128 * P.hips} y={-0.202} z={-0.235 * P.hips} sx={0.155 * P.hips} sy={0.165} sz={0.130} />
-      <M name="hamstrings"  x={lx} y={-0.465} z={-0.145 * thighR - 0.012} sx={0.110 * thighR} sy={0.218} sz={0.082} />
-      <M name="calves"      x={lx - 0.04} y={-0.848} z={-0.118} sx={0.066 * calfR} sy={0.172} sz={0.072} />
+      <M name="traps"       x={0} y={0.66} z={-0.16} sx={0.22 * shx} sy={0.15} sz={0.05 * FLAT} both={false} />
+      <M name="rear_delts"  x={0.36 * shx} y={0.685} z={-0.10} sx={0.08} sy={0.088} sz={0.06 * FLAT} />
+      <M name="lats"        x={0.18 * P.chest} y={0.33} z={-0.16} sx={0.12 * P.chest} sy={0.26} sz={0.05 * FLAT} />
+      <M name="rhomboids"   x={0} y={0.50} z={-0.17} sx={0.15} sy={0.13} sz={0.045 * FLAT} both={false} />
+      <M name="triceps"     x={ax * 1.0 + 0.005} y={0.45} z={-0.085} sx={0.062 * armR} sy={0.155} sz={0.05 * FLAT} />
+      <M name="lower_back"  x={0.055} y={0.12} z={-0.18 * P.waist} sx={0.055} sy={0.18} sz={0.04 * FLAT} />
+      <M name="glutes"      x={0.12 * P.hips} y={-0.04} z={-0.21 * P.hips} sx={0.14 * P.hips} sy={0.15} sz={0.1 * FLAT} />
+      <M name="hamstrings"  x={lx} y={-0.45} z={-0.13 * thighR} sx={0.105 * thighR} sy={0.2} sz={0.06 * FLAT} />
+      <M name="calves"      x={lx} y={-0.86} z={-0.10} sx={0.062 * calfR} sy={0.16} sz={0.06 * FLAT} />
     </group>
   )
 }
